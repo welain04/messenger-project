@@ -2,16 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Basic app theming inspired by the reference page */
+/* Светлая тема в духе лендинга Техниума */
 body {
-  @apply bg-surface-900 text-slate-50 antialiased;
+  @apply bg-surface-900 text-slate-900 antialiased;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .card-surface {
-  @apply bg-surface-800/80 backdrop-blur-lg shadow-card border border-slate-800/60;
+  /* Светлая карточка с мягкой тенью и тонким бордером */
+  @apply bg-white shadow-card border border-slate-200;
 }
 
 .pill {
-  @apply inline-flex items-center rounded-full border border-slate-700/70 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300;
+  @apply inline-flex items-center rounded-full border border-primary-100 bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary-700;
 }
 

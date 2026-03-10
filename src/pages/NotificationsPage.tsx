@@ -9,8 +9,8 @@ export const NotificationsPage = () => {
   return (
     <section className="card-surface flex w-full flex-col rounded-2xl p-4 sm:p-6">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-50 sm:text-xl">Уведомления</h2>
-        <span className="rounded-full bg-slate-900/70 px-2 py-0.5 text-[11px] text-slate-300">
+        <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">Уведомления</h2>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
           Непрочитано: {unreadCount}
         </span>
       </div>
@@ -21,8 +21,8 @@ export const NotificationsPage = () => {
             key={notification.id}
             className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-2.5 ${
               notification.read
-                ? "border-slate-800/80 bg-slate-900/60 text-slate-300"
-                : "border-primary-500/40 bg-primary-500/10 text-slate-100"
+                ? "border-slate-200 bg-slate-50 text-slate-700"
+                : "border-primary-100 bg-primary-50 text-slate-800"
             }`}
           >
             <div className="flex-1">
@@ -30,14 +30,14 @@ export const NotificationsPage = () => {
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                     notification.type === "mention"
-                      ? "bg-fuchsia-500/20 text-fuchsia-200"
-                      : "bg-slate-500/20 text-slate-200"
+                      ? "bg-primary-100 text-primary-700"
+                      : "bg-slate-100 text-slate-700"
                   }`}
                 >
                   {notification.type === "mention" ? "Упоминание" : "Система"}
                 </span>
                 {!notification.read && (
-                  <span className="text-[10px] text-primary-200">новое</span>
+                  <span className="text-[10px] text-primary-600">новое</span>
                 )}
               </div>
               <p>{notification.text}</p>

@@ -4,12 +4,12 @@ import { ChatSummary, mockChats } from "../mockData";
 // Возвращает классы для цветной иконки чата в зависимости от его типа.
 const chatBadgeClasses = (type: ChatSummary["type"]) => {
   if (type === "direct") {
-    return "bg-emerald-500/90";
+    return "bg-primary-500";
   }
   if (type === "group") {
-    return "bg-sky-500/90";
+    return "bg-sky-500";
   }
-  return "bg-gradient-to-tr from-primary-500 to-fuchsia-500";
+  return "bg-slate-800";
 };
 
 // Отдельный элемент списка чата: на мобильном оставляем только иконку,
@@ -22,10 +22,10 @@ const ChatListItem = ({ chat }: { chat: ChatSummary }) => {
     <Link
       to={`/chats/${chat.id}`}
       className={`group flex cursor-pointer items-center justify-center gap-3 rounded-xl px-1.5 py-1.5 text-sm transition 
-      ${isActive ? "bg-slate-800/80 text-slate-50" : "hover:bg-slate-800/40 text-slate-200"} sm:justify-start sm:px-3 sm:py-2`}
+      ${isActive ? "bg-primary-50 text-primary-700" : "hover:bg-slate-100 hover:text-slate-900"} sm:justify-start sm:px-3 sm:py-2`}
     >
       <div
-        className={`flex h-9 w-9 items-center justify-center rounded-2xl text-xs font-semibold text-white shadow-card ${chatBadgeClasses(
+        className={`flex h-9 w-9 items-center justify-center rounded-2xl text-xs font-semibold text-white shadow-sm ${chatBadgeClasses(
           chat.type
         )}`}
       >
@@ -33,7 +33,7 @@ const ChatListItem = ({ chat }: { chat: ChatSummary }) => {
       </div>
       <div className="hidden min-w-0 flex-1 sm:block">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-xs font-medium">{chat.title}</p>
+          <p className="truncate text-xs font-medium text-slate-900">{chat.title}</p>
           <span className="shrink-0 text-[11px] text-slate-400">{chat.lastTime}</span>
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
@@ -55,8 +55,8 @@ export const Sidebar = () => {
     <aside className="flex h-full w-16 flex-col gap-2 sm:mb-0 sm:w-full sm:max-w-xs sm:gap-3 sm:pr-4">
       <div className="card-surface flex h-full flex-col items-center rounded-2xl p-1.5 sm:p-3">
         <div className="mb-2 hidden w-full items-center justify-between gap-2 sm:flex">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Все чаты</span>
-          <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-300">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Все чаты</span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
             {mockChats.length} активных
           </span>
         </div>

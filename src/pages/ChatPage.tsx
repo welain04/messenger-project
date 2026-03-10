@@ -17,8 +17,8 @@ const MessageBubble = ({
       <div
         className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs shadow-sm ${
           isOwn
-            ? "rounded-br-sm bg-primary-500 text-slate-50"
-            : "rounded-bl-sm bg-slate-800/80 text-slate-100 border border-slate-700/80"
+            ? "rounded-br-sm bg-primary-500 text-white"
+            : "rounded-bl-sm bg-slate-100 text-slate-900 border border-slate-200"
         }`}
       >
         <p className="whitespace-pre-wrap break-words">{text}</p>
@@ -31,11 +31,11 @@ const MessageBubble = ({
 // Поле ввода сообщения c «заглушкой» отправки.
 const MessageInput = () => {
   return (
-    <div className="border-t border-slate-800/80 p-3">
+    <div className="border-t border-slate-200 bg-white p-3">
       <div className="flex items-end gap-2">
         <textarea
           rows={1}
-          className="min-h-[44px] flex-1 resize-none rounded-xl border border-slate-700/80 bg-slate-900/60 px-3 py-2 text-xs text-slate-50 outline-none ring-primary-500/40 placeholder:text-slate-500 focus:border-primary-500 focus:ring-1"
+          className="min-h-[44px] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
           placeholder="Напишите сообщение куратору или группе..."
         />
         <button
@@ -83,7 +83,7 @@ export const ChatPage = () => {
     <div className="flex w-full flex-row gap-2 sm:gap-4">
       <Sidebar />
       <section className="card-surface flex flex-1 flex-col rounded-2xl">
-        <header className="flex items-center justify-between border-b border-slate-800/80 px-4 py-3">
+        <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
           <div className="flex items-center gap-3">
             <div
               className={`flex h-9 w-9 items-center justify-center rounded-2xl text-xs font-semibold text-white shadow-card ${getChatBadgeClasses(
@@ -93,18 +93,20 @@ export const ChatPage = () => {
               {chat.type === "course" ? "CRS" : chat.type === "group" ? "GRP" : "DM"}
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-50">{chat.title}</p>
-              <p className="text-[11px] text-slate-400">Кураторы и ученики курса общаются здесь</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {chat.type === "course" ? "Чат курса" : chat.type === "group" ? "Групповой чат" : "Личный чат"}
+              </p>
+              <p className="text-sm font-medium text-slate-900">{chat.title}</p>
             </div>
           </div>
-          <div className="hidden text-[11px] text-slate-400 sm:block">
-            В сети: <span className="font-medium text-emerald-300">{currentUser.name}</span> и куратор
+          <div className="hidden text-[11px] text-slate-500 sm:block">
+            В сети: <span className="font-medium text-emerald-600">{currentUser.name}</span> и куратор
           </div>
         </header>
 
-        <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3 text-xs">
+        <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 px-3 py-3 text-xs sm:px-5">
           <div className="mb-1 flex justify-center">
-            <span className="rounded-full bg-slate-900/80 px-3 py-0.5 text-[10px] text-slate-400">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-0.5 text-[10px] text-slate-400">
               Сегодня
             </span>
           </div>

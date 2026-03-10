@@ -5,19 +5,20 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          50: "#f5f3ff",
-          100: "#ede9fe",
-          200: "#ddd6fe",
-          500: "#7c3aed",
-          600: "#6d28d9"
+          50: "#eff6ff",
+          100: "#dbeafe",
+          200: "#bfdbfe",
+          500: "#4a7fff",
+          600: "#3b6fe8",
+          700: "#315fd0"
         },
         surface: {
-          900: "#050816",
-          800: "#0b1020"
+          900: "#f7f7fb",
+          800: "#ffffff"
         }
       },
       boxShadow: {
-        card: "0 18px 40px rgba(15, 23, 42, 0.45)"
+        card: "0 18px 40px rgba(15, 23, 42, 0.12)"
       }
     }
   },
