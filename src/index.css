@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Basic app theming inspired by the reference page */
+body {
+  @apply bg-surface-900 text-slate-50 antialiased;
+}
+
+.card-surface {
+  @apply bg-surface-800/80 backdrop-blur-lg shadow-card border border-slate-800/60;
+}
+
+.pill {
+  @apply inline-flex items-center rounded-full border border-slate-700/70 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-300;
+}
+
