@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChatSummary, mockChats } from "../mockData";
 
@@ -51,11 +52,34 @@ const ChatListItem = ({ chat }: { chat: ChatSummary }) => {
 
 // Левая колонка со списком всех чатов.
 export const Sidebar = () => {
+  const [isUpdating, setIsUpdating] = useState(true);
+  const [dots, setDots] = useState(0);
+
+  // Эмулируем короткую загрузку списка чатов и анимацию точек.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((prev) => (prev + 1) % 4);
+    }, 400);
+
+    const timeout = setTimeout(() => {
+      setIsUpdating(false);
+      setDots(0);
+      clearInterval(interval);
+    }, 1600);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, []);
+
   return (
     <aside className="flex h-full w-16 flex-col gap-2 sm:mb-0 sm:w-full sm:max-w-xs sm:gap-3 sm:pr-4">
       <div className="card-surface flex h-full flex-col items-center rounded-2xl p-1.5 sm:p-3">
         <div className="mb-2 hidden w-full items-center justify-between gap-2 sm:flex">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Все чаты</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {isUpdating ? `Обновление чатов${".".repeat(dots)}` : "Все чаты"}
+          </span>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
             {mockChats.length} активных
           </span>
