@@ -1,25 +1,24 @@
-import { ReactNode, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { ReactNode } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   BellIcon,
   ChatBubbleBottomCenterTextIcon,
   UserCircleIcon,
-  PlusIcon,
-  ChatBubbleOvalLeftEllipsisIcon
+  ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import logoAsterisk from "../assets/logo-asterisk.png";
+import { useAuth } from "../auth/AuthContext";
 
 interface LayoutProps {
   children: ReactNode;
 }
 
-// Верхний уровень каркаса: общий фон, шапка, навигация и контейнер для страниц.
 export const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const isAuth = location.pathname.startsWith("/auth");
-  const [showNewChatPanel, setShowNewChatPanel] = useState(false);
 
-  // Для /auth показываем упрощённый layout без верхней навигации.
   if (isAuth) {
     return (
       <div className="min-h-screen bg-surface-900 flex items-center justify-center px-4">
@@ -81,47 +80,22 @@ export const Layout = ({ children }: LayoutProps) => {
                 <span className="hidden text-xs sm:inline">Профиль</span>
               </NavLink>
             </nav>
-            <button
-              type="button"
-              onClick={() => setShowNewChatPanel((prev) => !prev)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-white shadow-card transition hover:bg-primary-600"
-            >
-              <PlusIcon className="h-4 w-4" />
-            </button>
-          </div>
-
-          {showNewChatPanel && (
-            <div className="card-surface absolute right-2 top-14 z-50 w-[calc(100vw-2.5rem)] rounded-2xl p-3 text-xs sm:right-4 sm:w-80">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
-                  <ChatBubbleOvalLeftEllipsisIcon className="h-4 w-4 text-primary-500" />
-                  <span className="font-medium">Создать чат</span>
-                </div>
+            {user && (
+              <div className="hidden items-center gap-2 text-[11px] text-slate-500 sm:flex">
+                <span>
+                  <span className="text-slate-400">Вы:</span> <span className="font-medium text-slate-700">{user.nickname}</span>
+                </span>
                 <button
                   type="button"
-                  onClick={() => setShowNewChatPanel(false)}
-                  className="rounded-full px-2 py-0.5 text-[10px] text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  onClick={() => { logout(); navigate("/auth", { replace: true }); }}
+                  title="Выйти"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                 >
-                  закрыть
+                  <ArrowRightOnRectangleIcon className="h-4 w-4" />
                 </button>
               </div>
-              <p className="mb-2 text-[11px] text-slate-500">
-                В полной версии здесь будет форма создания личных и групповых чатов для потоков и курсов.
-              </p>
-              <div className="grid gap-2 text-[11px]">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="mb-0.5 text-slate-800">Личный чат</div>
-                  <div className="text-slate-500">Например, общение с куратором или студентом один на один.</div>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="mb-0.5 text-slate-800">Групповой чат</div>
-                  <div className="text-slate-500">
-                    Небольшие команды внутри потока, проектные группы и чаты модуля.
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
@@ -129,4 +103,3 @@ export const Layout = ({ children }: LayoutProps) => {
     </div>
   );
 };
-

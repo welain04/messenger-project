@@ -1,28 +1,48 @@
-import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChatSummary, mockChats } from "../mockData";
+import { useChats } from "../chats/ChatsContext";
+import { useAuth } from "../auth/AuthContext";
+import { ErrorBox, LoadingHint } from "./States";
+import type { Chat } from "../api";
+import { useUser } from "../users/userCache";
 
-// Возвращает классы для цветной иконки чата в зависимости от его типа.
-const chatBadgeClasses = (type: ChatSummary["type"]) => {
-  if (type === "direct") {
-    return "bg-primary-500";
+const chatBadgeClasses = (type: Chat["type"]) =>
+  type === "personal" ? "bg-primary-500" : "bg-sky-500";
+
+const formatTime = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
   }
-  if (type === "group") {
-    return "bg-sky-500";
-  }
-  return "bg-slate-800";
 };
 
-// Отдельный элемент списка чата: на мобильном оставляем только иконку,
-// на десктопе показываем полную информацию о чате.
-const ChatListItem = ({ chat }: { chat: ChatSummary }) => {
+const ChatListItem = ({ chat }: { chat: Chat }) => {
   const location = useLocation();
+  const { user } = useAuth();
   const isActive = location.pathname.startsWith(`/chats/${chat.id}`);
+
+  const otherId =
+    chat.type === "personal"
+      ? chat.participant_ids.find((id) => id !== user?.id) ?? null
+      : null;
+  const otherEntry = useUser(otherId);
+
+  const title =
+    chat.type === "group"
+      ? chat.title || "Без названия"
+      : otherEntry?.user?.nickname
+        ? otherEntry.user.nickname
+        : otherId
+          ? otherId.slice(0, 8) + "…"
+          : "Личный чат";
+
+  const lastText = chat.last_message?.text ?? "Сообщений пока нет";
+  const lastTime = chat.last_message ? formatTime(chat.last_message.sent_at) : formatTime(chat.created_at);
 
   return (
     <Link
       to={`/chats/${chat.id}`}
-      className={`group flex cursor-pointer items-center justify-center gap-3 rounded-xl px-1.5 py-1.5 text-sm transition 
+      className={`group flex cursor-pointer items-center justify-center gap-3 rounded-xl px-1.5 py-1.5 text-sm transition
       ${isActive ? "bg-primary-50 text-primary-700" : "hover:bg-slate-100 hover:text-slate-900"} sm:justify-start sm:px-3 sm:py-2`}
     >
       <div
@@ -30,18 +50,18 @@ const ChatListItem = ({ chat }: { chat: ChatSummary }) => {
           chat.type
         )}`}
       >
-        {chat.type === "course" ? "CRS" : chat.type === "group" ? "GRP" : "DM"}
+        {chat.type === "personal" ? "DM" : "GRP"}
       </div>
       <div className="hidden min-w-0 flex-1 sm:block">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-xs font-medium text-slate-900">{chat.title}</p>
-          <span className="shrink-0 text-[11px] text-slate-400">{chat.lastTime}</span>
+          <p className="truncate text-xs font-medium text-slate-900">{title}</p>
+          <span className="shrink-0 text-[11px] text-slate-400">{lastTime}</span>
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
-          <p className="truncate text-[11px] text-slate-400">{chat.lastMessage}</p>
-          {chat.unread > 0 && (
+          <p className="truncate text-[11px] text-slate-400">{lastText}</p>
+          {chat.unread_count > 0 && (
             <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary-500 text-[10px] font-semibold text-white">
-              {chat.unread}
+              {chat.unread_count}
             </span>
           )}
         </div>
@@ -50,42 +70,32 @@ const ChatListItem = ({ chat }: { chat: ChatSummary }) => {
   );
 };
 
-// Левая колонка со списком всех чатов.
 export const Sidebar = () => {
-  const [isUpdating, setIsUpdating] = useState(true);
-  const [dots, setDots] = useState(0);
-
-  // Эмулируем короткую загрузку списка чатов и анимацию точек.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots((prev) => (prev + 1) % 4);
-    }, 400);
-
-    const timeout = setTimeout(() => {
-      setIsUpdating(false);
-      setDots(0);
-      clearInterval(interval);
-    }, 1600);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
-  }, []);
+  const { chats, loading, error, refresh } = useChats();
 
   return (
     <aside className="flex h-full w-16 flex-col gap-2 sm:mb-0 sm:w-full sm:max-w-xs sm:gap-3 sm:pr-4">
-      <div className="card-surface flex h-full flex-col items-center rounded-2xl p-1.5 sm:p-3">
+      <div className="card-surface flex h-full flex-col items-stretch rounded-2xl p-1.5 sm:p-3">
         <div className="mb-2 hidden w-full items-center justify-between gap-2 sm:flex">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {isUpdating ? `Обновление чатов${".".repeat(dots)}` : "Все чаты"}
+            {loading ? <LoadingHint text="Обновление чатов" /> : "Все чаты"}
           </span>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
-            {mockChats.length} активных
+            {chats.length} активных
           </span>
         </div>
+        {error && (
+          <div className="hidden sm:block mb-2">
+            <ErrorBox message={error} onRetry={refresh} />
+          </div>
+        )}
         <div className="flex-1 space-y-1 overflow-y-auto pb-1">
-          {mockChats.map((chat) => (
+          {!loading && !error && chats.length === 0 && (
+            <p className="hidden sm:block px-2 py-3 text-[11px] text-slate-500">
+              Пока нет чатов. Создайте первый на странице «Чаты».
+            </p>
+          )}
+          {chats.map((chat) => (
             <ChatListItem key={chat.id} chat={chat} />
           ))}
         </div>
@@ -93,4 +103,3 @@ export const Sidebar = () => {
     </aside>
   );
 };
-

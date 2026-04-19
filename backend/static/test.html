@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Messenger API · Тест эндпоинтов</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #111827;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-2: #0ea5e9;
+      --ok: #22c55e;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 24px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { margin: 0; font-size: 18px; }
+    header .token {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 480px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    header label { font-size: 12px; color: var(--muted); }
+    header input {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      width: 320px;
+    }
+    main {
+      padding: 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    section h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      color: var(--accent);
+      letter-spacing: 0.3px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .row > label {
+      width: 110px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    input, select, textarea {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font: inherit;
+      flex: 1;
+      min-width: 120px;
+    }
+    textarea { min-height: 60px; resize: vertical; font-family: inherit; }
+    button {
+      background: var(--accent-2);
+      color: white;
+      border: 0;
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background: var(--accent); color: #06283d; }
+    button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    button.secondary:hover { background: var(--panel-2); color: var(--text); }
+    pre.output {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      max-height: 320px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status { font-size: 12px; margin-bottom: 4px; color: var(--muted); }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Messenger API · тест эндпоинтов</h1>
+  <div>
+    <label for="api-base">API base</label><br />
+    <input id="api-base" value="/api/v1" />
+  </div>
+  <div>
+    <label>Токен</label><br />
+    <span id="token-view" class="token">—</span>
+    <button class="secondary" id="clear-token">Сбросить</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- AUTH -->
+  <section>
+    <h2>Auth · POST /auth/register</h2>
+    <div class="row"><label>nickname</label><input id="reg-nick" value="alice" /></div>
+    <div class="row"><label>password</label><input id="reg-pass" value="secret1" /></div>
+    <div class="row"><label>role</label>
+      <select id="reg-role">
+        <option value="student">student</option>
+        <option value="curator">curator</option>
+      </select>
+    </div>
+    <button onclick="register()">Зарегистрировать</button>
+    <div class="status" id="reg-status">—</div>
+    <pre class="output" id="reg-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Auth · POST /auth/login</h2>
+    <div class="row"><label>nickname</label><input id="log-nick" value="alice" /></div>
+    <div class="row"><label>password</label><input id="log-pass" value="secret1" /></div>
+    <button onclick="login()">Войти</button>
+    <button class="secondary" onclick="logout()">Logout</button>
+    <div class="hint">После успешного входа access_token сохраняется в localStorage и подставляется во все запросы.</div>
+    <div class="status" id="log-status">—</div>
+    <pre class="output" id="log-out">—</pre>
+  </section>
+
+  <!-- USERS -->
+  <section>
+    <h2>Users · GET /users/me</h2>
+    <button onclick="getMe()">Получить профиль</button>
+    <div class="status" id="me-status">—</div>
+    <pre class="output" id="me-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Users · PATCH /users/me</h2>
+    <div class="row"><label>new nickname</label><input id="upd-nick" value="alice2" /></div>
+    <button onclick="updateMe()">Сменить ник</button>
+    <div class="status" id="upd-status">—</div>
+    <pre class="output" id="upd-out">—</pre>
+  </section>
+
+  <!-- CHATS -->
+  <section>
+    <h2>Chats · POST /chats</h2>
+    <div class="row"><label>type</label>
+      <select id="chat-type">
+        <option value="group">group</option>
+        <option value="personal">personal</option>
+      </select>
+    </div>
+    <div class="row"><label>title</label><input id="chat-title" value="Vibe Coding" /></div>
+    <div class="row"><label>participant_ids</label>
+      <textarea id="chat-parts" placeholder="UUID через запятую (без вашего id — он добавится сам)"></textarea>
+    </div>
+    <button onclick="createChat()">Создать чат</button>
+    <div class="hint">Личный — ровно 2 участника без title. Групповой — ≥ 2 и обязательный title.</div>
+    <div class="status" id="chat-create-status">—</div>
+    <pre class="output" id="chat-create-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Chats · GET /chats</h2>
+    <button onclick="listChats()">Список чатов</button>
+    <div class="hint">В ответе каждого чата уже есть last_message и unread_count.</div>
+    <div class="status" id="chat-list-status">—</div>
+    <pre class="output" id="chat-list-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Chats · GET /chats/{chat_id}</h2>
+    <div class="row"><label>chat_id</label><input id="chat-get-id" placeholder="UUID" /></div>
+    <button onclick="getChat()">Получить</button>
+    <div class="status" id="chat-get-status">—</div>
+    <pre class="output" id="chat-get-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Chats · participants</h2>
+    <div class="row"><label>chat_id</label><input id="part-chat-id" placeholder="UUID чата" /></div>
+    <div class="row"><label>user_id</label><input id="part-user-id" placeholder="UUID пользователя" /></div>
+    <div class="row">
+      <button onclick="addParticipant()">POST add</button>
+      <button class="secondary" onclick="removeParticipant()">DELETE remove</button>
+    </div>
+    <div class="hint">Только для group; нужны права создателя или роль curator.</div>
+    <div class="status" id="part-status">—</div>
+    <pre class="output" id="part-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Chats · DELETE /chats/{chat_id}</h2>
+    <div class="row"><label>chat_id</label><input id="chat-del-id" placeholder="UUID" /></div>
+    <button onclick="deleteChat()">Удалить чат</button>
+    <div class="status" id="chat-del-status">—</div>
+    <pre class="output" id="chat-del-out">—</pre>
+  </section>
+
+  <!-- MESSAGES -->
+  <section>
+    <h2>Messages · GET /chats/{chat_id}/messages</h2>
+    <div class="row"><label>chat_id</label><input id="msg-list-chat" placeholder="UUID" /></div>
+    <div class="row">
+      <label>limit / offset</label>
+      <input id="msg-list-limit" value="50" />
+      <input id="msg-list-offset" value="0" />
+    </div>
+    <button onclick="listMessages()">История</button>
+    <div class="status" id="msg-list-status">—</div>
+    <pre class="output" id="msg-list-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Messages · POST /chats/{chat_id}/messages</h2>
+    <div class="row"><label>chat_id</label><input id="msg-send-chat" placeholder="UUID" /></div>
+    <div class="row"><label>text</label><textarea id="msg-send-text">Привет из тест-страницы!</textarea></div>
+    <button onclick="sendMessage()">Отправить</button>
+    <div class="status" id="msg-send-status">—</div>
+    <pre class="output" id="msg-send-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Messages · PATCH /messages/{message_id}</h2>
+    <div class="row"><label>message_id</label><input id="msg-edit-id" placeholder="UUID" /></div>
+    <div class="row"><label>text</label><textarea id="msg-edit-text">Отредактировано</textarea></div>
+    <button onclick="editMessage()">Редактировать</button>
+    <div class="status" id="msg-edit-status">—</div>
+    <pre class="output" id="msg-edit-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Messages · DELETE /messages/{message_id}</h2>
+    <div class="row"><label>message_id</label><input id="msg-del-id" placeholder="UUID" /></div>
+    <button onclick="deleteMessage()">Удалить</button>
+    <div class="status" id="msg-del-status">—</div>
+    <pre class="output" id="msg-del-out">—</pre>
+  </section>
+
+  <!-- NOTIFICATIONS -->
+  <section>
+    <h2>Notifications · GET /notifications</h2>
+    <button onclick="listNotifications()">Список</button>
+    <div class="status" id="ntf-list-status">—</div>
+    <pre class="output" id="ntf-list-out">—</pre>
+  </section>
+
+  <section>
+    <h2>Notifications · PATCH /notifications/{id}/read</h2>
+    <div class="row"><label>notification_id</label><input id="ntf-read-id" placeholder="UUID" /></div>
+    <button onclick="markRead()">Пометить прочитанным</button>
+    <div class="status" id="ntf-read-status">—</div>
+    <pre class="output" id="ntf-read-out">—</pre>
+  </section>
+
+</main>
+
+<script>
+  const TOKEN_KEY = "messenger.token";
+
+  function $(id) { return document.getElementById(id); }
+  function getToken() { return localStorage.getItem(TOKEN_KEY); }
+  function setToken(t) {
+    if (t) localStorage.setItem(TOKEN_KEY, t);
+    else localStorage.removeItem(TOKEN_KEY);
+    renderToken();
+  }
+  function renderToken() {
+    const t = getToken();
+    $("token-view").textContent = t ? (t.slice(0, 24) + "…" + t.slice(-8)) : "—";
+  }
+  function logout() { setToken(null); }
+  $("clear-token").onclick = logout;
+  renderToken();
+
+  function baseUrl() {
+    return $("api-base").value.replace(/\/$/, "");
+  }
+
+  async function call(path, { method = "GET", body, statusEl, outEl } = {}) {
+    const headers = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const t = getToken();
+    if (t) headers["Authorization"] = "Bearer " + t;
+
+    if (statusEl) { statusEl.textContent = method + " " + path + " …"; statusEl.className = "status"; }
+    if (outEl) outEl.textContent = "…";
+
+    let res, data;
+    try {
+      res = await fetch(baseUrl() + path, {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch (e) {
+      if (statusEl) { statusEl.textContent = "Сеть: " + e.message; statusEl.className = "status err"; }
+      if (outEl) outEl.textContent = String(e);
+      return { ok: false, status: 0, data: null };
+    }
+
+    const text = await res.text();
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+    if (statusEl) {
+      statusEl.textContent = res.status + " " + res.statusText;
+      statusEl.className = "status " + (res.ok ? "ok" : "err");
+    }
+    if (outEl) {
+      outEl.textContent = data === null ? "(no content)"
+        : typeof data === "string" ? data
+        : JSON.stringify(data, null, 2);
+    }
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  // ---- AUTH ----
+  async function register() {
+    await call("/auth/register", {
+      method: "POST",
+      body: {
+        nickname: $("reg-nick").value,
+        password: $("reg-pass").value,
+        role: $("reg-role").value,
+      },
+      statusEl: $("reg-status"),
+      outEl: $("reg-out"),
+    });
+  }
+  async function login() {
+    const r = await call("/auth/login", {
+      method: "POST",
+      body: { nickname: $("log-nick").value, password: $("log-pass").value },
+      statusEl: $("log-status"),
+      outEl: $("log-out"),
+    });
+    if (r.ok && r.data && r.data.access_token) setToken(r.data.access_token);
+  }
+
+  // ---- USERS ----
+  async function getMe() {
+    await call("/users/me", { statusEl: $("me-status"), outEl: $("me-out") });
+  }
+  async function updateMe() {
+    await call("/users/me", {
+      method: "PATCH",
+      body: { nickname: $("upd-nick").value },
+      statusEl: $("upd-status"),
+      outEl: $("upd-out"),
+    });
+  }
+
+  // ---- CHATS ----
+  async function createChat() {
+    const type = $("chat-type").value;
+    const title = $("chat-title").value;
+    const parts = $("chat-parts").value
+      .split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+    const body = { type, participant_ids: parts };
+    if (type === "group") body.title = title;
+    const r = await call("/chats", {
+      method: "POST",
+      body,
+      statusEl: $("chat-create-status"),
+      outEl: $("chat-create-out"),
+    });
+    if (r.ok && r.data && r.data.id) {
+      // удобство: автоподстановка id во все остальные поля
+      ["chat-get-id", "part-chat-id", "chat-del-id", "msg-list-chat", "msg-send-chat"]
+        .forEach(id => { if (!$(id).value) $(id).value = r.data.id; });
+    }
+  }
+  async function listChats() {
+    await call("/chats", { statusEl: $("chat-list-status"), outEl: $("chat-list-out") });
+  }
+  async function getChat() {
+    const id = $("chat-get-id").value.trim();
+    if (!id) return;
+    await call("/chats/" + id, { statusEl: $("chat-get-status"), outEl: $("chat-get-out") });
+  }
+  async function addParticipant() {
+    const cid = $("part-chat-id").value.trim();
+    const uid = $("part-user-id").value.trim();
+    if (!cid || !uid) return;
+    await call("/chats/" + cid + "/participants", {
+      method: "POST",
+      body: { user_id: uid },
+      statusEl: $("part-status"),
+      outEl: $("part-out"),
+    });
+  }
+  async function removeParticipant() {
+    const cid = $("part-chat-id").value.trim();
+    const uid = $("part-user-id").value.trim();
+    if (!cid || !uid) return;
+    await call("/chats/" + cid + "/participants/" + uid, {
+      method: "DELETE",
+      statusEl: $("part-status"),
+      outEl: $("part-out"),
+    });
+  }
+  async function deleteChat() {
+    const id = $("chat-del-id").value.trim();
+    if (!id) return;
+    await call("/chats/" + id, {
+      method: "DELETE",
+      statusEl: $("chat-del-status"),
+      outEl: $("chat-del-out"),
+    });
+  }
+
+  // ---- MESSAGES ----
+  async function listMessages() {
+    const id = $("msg-list-chat").value.trim();
+    if (!id) return;
+    const limit = $("msg-list-limit").value || 50;
+    const offset = $("msg-list-offset").value || 0;
+    await call(`/chats/${id}/messages?limit=${limit}&offset=${offset}`, {
+      statusEl: $("msg-list-status"),
+      outEl: $("msg-list-out"),
+    });
+  }
+  async function sendMessage() {
+    const id = $("msg-send-chat").value.trim();
+    if (!id) return;
+    const r = await call("/chats/" + id + "/messages", {
+      method: "POST",
+      body: { text: $("msg-send-text").value },
+      statusEl: $("msg-send-status"),
+      outEl: $("msg-send-out"),
+    });
+    if (r.ok && r.data && r.data.id && !$("msg-edit-id").value) {
+      $("msg-edit-id").value = r.data.id;
+      $("msg-del-id").value = r.data.id;
+    }
+  }
+  async function editMessage() {
+    const id = $("msg-edit-id").value.trim();
+    if (!id) return;
+    await call("/messages/" + id, {
+      method: "PATCH",
+      body: { text: $("msg-edit-text").value },
+      statusEl: $("msg-edit-status"),
+      outEl: $("msg-edit-out"),
+    });
+  }
+  async function deleteMessage() {
+    const id = $("msg-del-id").value.trim();
+    if (!id) return;
+    await call("/messages/" + id, {
+      method: "DELETE",
+      statusEl: $("msg-del-status"),
+      outEl: $("msg-del-out"),
+    });
+  }
+
+  // ---- NOTIFICATIONS ----
+  async function listNotifications() {
+    const r = await call("/notifications", {
+      statusEl: $("ntf-list-status"),
+      outEl: $("ntf-list-out"),
+    });
+    if (r.ok && Array.isArray(r.data) && r.data.length && !$("ntf-read-id").value) {
+      $("ntf-read-id").value = r.data[0].id;
+    }
+  }
+  async function markRead() {
+    const id = $("ntf-read-id").value.trim();
+    if (!id) return;
+    await call("/notifications/" + id + "/read", {
+      method: "PATCH",
+      statusEl: $("ntf-read-status"),
+      outEl: $("ntf-read-out"),
+    });
+  }
+</script>
+</body>
+</html>

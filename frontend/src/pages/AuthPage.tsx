@@ -1,22 +1,45 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
+import { ApiError } from "../api";
+import type { UserRole } from "../api";
+import { ErrorBox } from "../components/States";
 
-// Простая страница входа/регистрации.
-// Здесь нет реального запроса — после сабмита просто перенаправляем пользователя в чаты.
+type Mode = "login" | "register";
+
 export const AuthPage = () => {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login, register } = useAuth();
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const [mode, setMode] = useState<Mode>("login");
+  const [nickname, setNickname] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<UserRole>("student");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsLoading(true);
-
-    // Имитация сетевого запроса.
-    setTimeout(() => {
-      setIsLoading(false);
-      navigate("/chats");
-    }, 700);
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (mode === "login") {
+        await login({ nickname, password });
+      } else {
+        await register({ nickname, password, role });
+      }
+      const redirectTo = (location.state as { from?: string } | null)?.from ?? "/chats";
+      navigate(redirectTo, { replace: true });
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setError(typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`);
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -35,7 +58,7 @@ export const AuthPage = () => {
       <div className="mb-5 inline-flex rounded-full bg-slate-100 p-1 text-[11px] text-slate-500">
         <button
           type="button"
-          onClick={() => setMode("login")}
+          onClick={() => { setMode("login"); setError(null); }}
           className={`flex-1 rounded-full px-4 py-1.5 transition ${
             mode === "login" ? "bg-primary-500 text-white shadow-card" : "hover:text-slate-900"
           }`}
@@ -44,7 +67,7 @@ export const AuthPage = () => {
         </button>
         <button
           type="button"
-          onClick={() => setMode("register")}
+          onClick={() => { setMode("register"); setError(null); }}
           className={`flex-1 rounded-full px-4 py-1.5 transition ${
             mode === "register" ? "bg-primary-500 text-white shadow-card" : "hover:text-slate-900"
           }`}
@@ -54,34 +77,17 @@ export const AuthPage = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-        {mode === "register" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs text-slate-600">Имя</label>
-              <input
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-                placeholder="Саша"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-600">Фамилия</label>
-              <input
-                required
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-                placeholder="Иванов(а)"
-              />
-            </div>
-          </div>
-        )}
-
         <div>
-          <label className="mb-1 block text-xs text-slate-600">Email</label>
+          <label className="mb-1 block text-xs text-slate-600">Никнейм</label>
           <input
-            type="email"
             required
+            minLength={3}
+            maxLength={30}
+            pattern="[A-Za-z0-9_]+"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-            placeholder="you@example.com"
+            placeholder="alice (буквы, цифры, _, 3–30 симв.)"
           />
         </div>
 
@@ -90,8 +96,11 @@ export const AuthPage = () => {
           <input
             type="password"
             required
+            minLength={6}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-            placeholder="Минимум 8 символов"
+            placeholder="минимум 6 символов"
           />
         </div>
 
@@ -99,28 +108,28 @@ export const AuthPage = () => {
           <div>
             <label className="mb-1 block text-xs text-slate-600">Роль</label>
             <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 focus:border-primary-500 focus:ring-1"
-              defaultValue="student"
             >
               <option value="student">Ученик</option>
-              <option value="mentor">Куратор</option>
+              <option value="curator">Куратор</option>
             </select>
           </div>
         )}
 
+        {error && <ErrorBox message={error} />}
+
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={submitting}
           className="mt-2 inline-flex w-full items-center justify-center rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-600 disabled:opacity-60"
         >
-          {isLoading ? "Входим..." : mode === "login" ? "Войти в мессенджер" : "Создать аккаунт"}
+          {submitting
+            ? mode === "login" ? "Входим…" : "Создаём аккаунт…"
+            : mode === "login" ? "Войти в мессенджер" : "Создать аккаунт"}
         </button>
-
-        <p className="mt-2 text-[11px] text-slate-500">
-          Для прототипа аутентификация не реализована: после нажатия кнопки вы сразу попадаете в чаты.
-        </p>
       </form>
     </div>
   );
 };
-

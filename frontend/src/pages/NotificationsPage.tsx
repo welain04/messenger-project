@@ -1,52 +1,117 @@
-import { mockNotifications } from "../mockData";
+import { useCallback, useEffect, useState } from "react";
+import { ApiError, notificationsApi } from "../api";
+import type { Notification } from "../api";
+import { ErrorBox, LoadingHint } from "../components/States";
 
-// Страница уведомлений: упрощённый список событий без «шума» от новых сообщений.
+const formatDateTime = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+};
+
 export const NotificationsPage = () => {
-  // На этой странице не показываем уведомления о новых сообщениях.
-  const items = mockNotifications.filter((n) => n.type !== "message");
-  const unreadCount = items.filter((n) => !n.read).length;
+  const [items, setItems] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await notificationsApi.list();
+      setItems(data);
+    } catch (e) {
+      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleMarkRead = async (id: string) => {
+    setMarkingId(id);
+    try {
+      const updated = await notificationsApi.markRead(id);
+      setItems((prev) => prev.map((n) => (n.id === id ? updated : n)));
+    } catch (e) {
+      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
+      setError(msg);
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const unreadCount = items.filter((n) => !n.is_read).length;
 
   return (
     <section className="card-surface flex w-full flex-col rounded-2xl p-4 sm:p-6">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">Уведомления</h2>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-          Непрочитано: {unreadCount}
-        </span>
+        <div className="flex items-center gap-3">
+          {loading && <LoadingHint text="Обновление" />}
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+            Непрочитано: {unreadCount}
+          </span>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11px] hover:bg-slate-100"
+          >
+            Обновить
+          </button>
+        </div>
       </div>
 
-      <div className="mt-4 space-y-2 text-xs">
+      {error && <div className="mb-3"><ErrorBox message={error} onRetry={load} /></div>}
+
+      {!loading && !error && items.length === 0 && (
+        <p className="py-8 text-center text-xs text-slate-500">Уведомлений пока нет.</p>
+      )}
+
+      <div className="mt-2 space-y-2 text-xs">
         {items.map((notification) => (
           <div
             key={notification.id}
             className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-2.5 ${
-              notification.read
+              notification.is_read
                 ? "border-slate-200 bg-slate-50 text-slate-700"
                 : "border-primary-100 bg-primary-50 text-slate-800"
             }`}
           >
             <div className="flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                    notification.type === "mention"
-                      ? "bg-primary-100 text-primary-700"
-                      : "bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {notification.type === "mention" ? "Упоминание" : "Система"}
-                </span>
-                {!notification.read && (
-                  <span className="text-[10px] text-primary-600">новое</span>
+                {!notification.is_read && (
+                  <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-700">
+                    новое
+                  </span>
                 )}
               </div>
-              <p>{notification.text}</p>
+              <p>{notification.message}</p>
             </div>
-            <div className="shrink-0 text-[10px] text-slate-400">{notification.createdAt}</div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <div className="text-[10px] text-slate-400">{formatDateTime(notification.created_at)}</div>
+              {!notification.is_read && (
+                <button
+                  type="button"
+                  onClick={() => handleMarkRead(notification.id)}
+                  disabled={markingId === notification.id}
+                  className="rounded-full border border-primary-200 bg-white px-2 py-0.5 text-[10px] font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-60"
+                >
+                  {markingId === notification.id ? "…" : "Прочитано"}
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
     </section>
   );
 };
-
