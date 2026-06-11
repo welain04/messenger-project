@@ -1,20 +1,29 @@
-"""Быстрый сквозной smoke-тест основных сценариев."""
+"""Быстрый сквозной smoke-тест основных сценариев.
+
+Использует отдельный файл БД (.smoke_test.db), чтобы не затирать messenger.db
+с тестовыми/seed-данными для разработки.
+"""
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# Важно: задать путь до импорта app (get_settings читает env при первом вызове).
+os.environ.setdefault("DATABASE_PATH", str(ROOT / ".smoke_test.db"))
+
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import storage  # noqa: E402
+from app import db, storage  # noqa: E402
 from app.main import app  # noqa: E402
 
 
 def main() -> None:
+    db.init_db()
     storage.reset_storage()
     c = TestClient(app)
 

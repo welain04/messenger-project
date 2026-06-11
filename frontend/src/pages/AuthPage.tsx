@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ApiError } from "../api";
+import { formatApiError } from "../api";
 import type { UserRole } from "../api";
 import { ErrorBox } from "../components/States";
 
@@ -16,6 +17,7 @@ export const AuthPage = () => {
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,11 +34,7 @@ export const AuthPage = () => {
       const redirectTo = (location.state as { from?: string } | null)?.from ?? "/chats";
       navigate(redirectTo, { replace: true });
     } catch (e) {
-      if (e instanceof ApiError) {
-        setError(typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`);
-      } else {
-        setError((e as Error).message);
-      }
+      setError(formatApiError(e));
     } finally {
       setSubmitting(false);
     }
@@ -58,7 +56,7 @@ export const AuthPage = () => {
       <div className="mb-5 inline-flex rounded-full bg-slate-100 p-1 text-[11px] text-slate-500">
         <button
           type="button"
-          onClick={() => { setMode("login"); setError(null); }}
+          onClick={() => { setMode("login"); setError(null); setShowPassword(false); }}
           className={`flex-1 rounded-full px-4 py-1.5 transition ${
             mode === "login" ? "bg-primary-500 text-white shadow-card" : "hover:text-slate-900"
           }`}
@@ -67,7 +65,7 @@ export const AuthPage = () => {
         </button>
         <button
           type="button"
-          onClick={() => { setMode("register"); setError(null); }}
+          onClick={() => { setMode("register"); setError(null); setShowPassword(false); }}
           className={`flex-1 rounded-full px-4 py-1.5 transition ${
             mode === "register" ? "bg-primary-500 text-white shadow-card" : "hover:text-slate-900"
           }`}
@@ -93,15 +91,30 @@ export const AuthPage = () => {
 
         <div>
           <label className="mb-1 block text-xs text-slate-600">Пароль</label>
-          <input
-            type="password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-            placeholder="минимум 6 символов"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
+              placeholder="минимум 6 символов"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              title={showPassword ? "Скрыть пароль" : "Показать пароль"}
+            >
+              {showPassword ? (
+                <EyeSlashIcon className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <EyeIcon className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
         </div>
 
         {mode === "register" && (

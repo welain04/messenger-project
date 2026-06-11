@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,22 +11,22 @@ router = APIRouter(tags=["messages"])
 
 
 def _get_chat_or_404(chat_id: UUID) -> Chat:
-    chat = storage.chats.get(chat_id)
+    chat = storage.get_chat(chat_id)
     if not chat:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chat not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Чат не найден")
     return chat
 
 
 def _get_message_or_404(message_id: UUID) -> Message:
-    msg = storage.messages.get(message_id)
+    msg = storage.get_message(message_id)
     if not msg:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Сообщение не найдено")
     return msg
 
 
 def _ensure_participant(chat: Chat, user: UserInDB) -> None:
     if user.id not in chat.participant_ids:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "You are not a participant of this chat")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Вы не участник этого чата")
 
 
 @router.get("/chats/{chat_id}/messages", response_model=list[MessageOut])
@@ -40,17 +39,10 @@ def list_messages(
     chat = _get_chat_or_404(chat_id)
     _ensure_participant(chat, current)
 
-    ids = storage.messages_by_chat.get(chat_id, [])
-    page = ids[offset : offset + limit]
-    items: list[MessageOut] = []
-    for mid in page:
-        m = storage.messages.get(mid)
-        if not m:
-            continue
-        if not m.is_read and m.author_id != current.id:
-            m.is_read = True
-        items.append(MessageOut.model_validate(m))
-    return items
+    # Открытие чата отмечает его прочитанным (водяной знак участника).
+    storage.mark_chat_read(chat_id, current.id)
+    items = storage.list_messages(chat_id, limit=limit, offset=offset)
+    return [MessageOut.model_validate(m) for m in items]
 
 
 @router.post(
@@ -67,16 +59,20 @@ def send_message(
     _ensure_participant(chat, current)
 
     msg = Message(chat_id=chat_id, author_id=current.id, text=payload.text)
-    storage.add_message(msg)
+    storage.create_message(msg)
 
     for pid in chat.participant_ids:
         if pid == current.id:
             continue
-        storage.add_notification(
+        storage.create_notification(
             Notification(
                 user_id=pid,
                 message=f"New message in chat {chat.title or 'personal'}",
-            )
+            ),
+            ntype="new_message",
+            actor_id=current.id,
+            chat_id=chat_id,
+            message_id=msg.id,
         )
     return MessageOut.model_validate(msg)
 
@@ -89,10 +85,9 @@ def edit_message(
 ) -> MessageOut:
     msg = _get_message_or_404(message_id)
     if msg.author_id != current.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the author can edit the message")
-    msg.text = payload.text
-    msg.edited_at = datetime.now(timezone.utc)
-    return MessageOut.model_validate(msg)
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Редактировать сообщение может только автор")
+    storage.update_message(message_id, payload.text)
+    return MessageOut.model_validate(_get_message_or_404(message_id))
 
 
 @router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -104,6 +99,6 @@ def delete_message(
     if msg.author_id != current.id and current.role != UserRole.curator:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Only author or curator can delete the message",
+            "Удалить сообщение может только автор или куратор",
         )
-    storage.remove_message(msg)
+    storage.soft_delete_message(message_id)

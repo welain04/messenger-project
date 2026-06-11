@@ -2,7 +2,7 @@
 // Нужен, чтобы не дёргать /users/{id} повторно из Sidebar и шапки ChatPage.
 
 import { useEffect, useSyncExternalStore } from "react";
-import { ApiError, usersApi } from "../api";
+import { formatApiError, usersApi } from "../api";
 import type { User, UUID } from "../api";
 
 type Status = "idle" | "loading" | "ok" | "error";
@@ -34,7 +34,7 @@ function ensureLoaded(id: UUID): void {
       cache.set(id, { status: "ok", user });
     })
     .catch((e) => {
-      const msg = e instanceof ApiError ? e.message : (e as Error).message;
+      const msg = formatApiError(e);
       cache.set(id, { status: "error", error: msg });
     })
     .finally(() => {

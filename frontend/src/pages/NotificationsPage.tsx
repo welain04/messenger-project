@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, notificationsApi } from "../api";
+import { formatApiError, notificationsApi } from "../api";
 import type { Notification } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
 
@@ -24,8 +24,7 @@ export const NotificationsPage = () => {
       const data = await notificationsApi.list();
       setItems(data);
     } catch (e) {
-      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
-      setError(msg);
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -41,8 +40,7 @@ export const NotificationsPage = () => {
       const updated = await notificationsApi.markRead(id);
       setItems((prev) => prev.map((n) => (n.id === id ? updated : n)));
     } catch (e) {
-      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
-      setError(msg);
+      setError(formatApiError(e));
     } finally {
       setMarkingId(null);
     }

@@ -1,10 +1,13 @@
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from . import db
 from .config import get_settings
+from .errors import validation_exception_handler
 from .middleware import JWTUserMiddleware
 from .routers import auth, chats, messages, notifications, users
 
@@ -13,6 +16,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    db.init_db()
     app = FastAPI(
         title="Online School Messenger API",
         version="1.0.0",
@@ -27,6 +31,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(JWTUserMiddleware)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(auth.router)

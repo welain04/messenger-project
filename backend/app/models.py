@@ -58,3 +58,6 @@ class Notification:
     id: UUID = field(default_factory=uuid4)
     is_read: bool = False
     created_at: datetime = field(default_factory=_utcnow)
+    actor_id: UUID | None = None
+    chat_id: UUID | None = None
+    message_id: UUID | None = None

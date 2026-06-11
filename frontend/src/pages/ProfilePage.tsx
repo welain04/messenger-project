@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { ApiError } from "../api";
+import { formatApiError } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
 
 export const ProfilePage = () => {
@@ -27,8 +27,7 @@ export const ProfilePage = () => {
       await updateMe({ nickname: nickname.trim() });
       setSavedAt(new Date());
     } catch (e) {
-      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
-      setError(msg);
+      setError(formatApiError(e));
     } finally {
       setSubmitting(false);
     }

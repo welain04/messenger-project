@@ -27,7 +27,7 @@ def _user_from_token(token: str | None) -> UserInDB | None:
         user_id = UUID(sub)
     except ValueError:
         return None
-    return storage.users.get(user_id)
+    return storage.get_user(user_id)
 
 
 def get_current_user(
@@ -42,9 +42,10 @@ def get_current_user(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="Не авторизован. Войдите в систему",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    storage.touch_last_seen(user.id)
     return user
 
 

@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import { chatsApi, ApiError } from "../api";
+import { chatsApi, formatApiError } from "../api";
 import type { Chat } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -31,8 +31,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       const data = await chatsApi.getChats();
       setChats(data);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : (e as Error).message ?? "Ошибка загрузки";
-      setError(msg);
+      setError(formatApiError(e, "Ошибка загрузки чатов"));
     } finally {
       setLoading(false);
     }

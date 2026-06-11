@@ -8,3 +8,9 @@ env/
 .idea/
 .vscode/
 *.egg-info/
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+.smoke_test.db*

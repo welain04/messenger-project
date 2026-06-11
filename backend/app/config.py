@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
+    # Путь к файлу SQLite. Пусто -> backend/messenger.db (см. app/db.py).
+    DATABASE_PATH: str = ""
+
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     HOST: str = "0.0.0.0"

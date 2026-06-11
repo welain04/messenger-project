@@ -1,7 +1,9 @@
 # Online School Messenger — Backend
 
-FastAPI-бэкенд мессенджера онлайн-школы. Хранение данных — в памяти (Python `dict`),
-без БД. Авторизация — JWT (HS256), пароли — bcrypt (passlib).
+FastAPI-бэкенд мессенджера онлайн-школы. Хранение данных — в **SQLite** (файл
+`messenger.db`, отдельный сервер БД не нужен). Схема создаётся автоматически при
+старте из `app/schema.sql` (адаптация `db-design.md` под SQLite). Авторизация —
+JWT (HS256), пароли — bcrypt (passlib).
 
 ## Структура
 
@@ -9,12 +11,14 @@ FastAPI-бэкенд мессенджера онлайн-школы. Хране�
 backend/
   app/
     __init__.py
-    config.py          # Settings (BaseSettings, читает .env)
-    main.py            # create_app(), CORS, JWT-middleware, /api/v1
+    config.py          # Settings (BaseSettings, читает .env), DATABASE_PATH
+    main.py            # create_app(), init_db(), CORS, JWT-middleware, /api/v1
     middleware.py      # JWTUserMiddleware -> request.state.user
     deps.py            # get_current_user / get_current_user_or_none
     security.py        # хеш паролей, create/decode JWT
-    storage.py         # in-memory хранилище + индексы + lock
+    db.py              # подключение к SQLite, init_db(), хелперы запросов
+    schema.sql         # DDL всех таблиц (SQLite)
+    storage.py         # слой доступа к данным (SQL-запросы), модели на входе/выходе
     models.py          # dataclass-модели UserInDB, Chat, Message, Notification
     schemas.py         # Pydantic-схемы запросов/ответов
     routers/
@@ -26,6 +30,8 @@ backend/
   scripts/
     export_openapi.py  # пишет openapi.json
     smoke_test.py      # сквозной TestClient-сценарий
+    seed.py            # наполнение БД тестовыми данными
+  messenger.db         # файл SQLite (создаётся автоматически, в .gitignore)
   requirements.txt
   .env / .env.example
   openapi.json         # автогенерируемая схема
@@ -63,6 +69,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `JWT_SECRET`                 | секрет подписи JWT                         | `change-me`                                                 |
 | `JWT_ALGORITHM`              | алгоритм JWT                               | `HS256`                                                     |
 | `ACCESS_TOKEN_EXPIRE_MINUTES`| TTL access-токена в минутах                | `1440`                                                      |
+| `DATABASE_PATH`              | путь к файлу SQLite                        | `<backend>/messenger.db`                                    |
 | `CORS_ORIGINS`               | разрешённые origin'ы через запятую         | `http://localhost:5173,http://127.0.0.1:5173`               |
 | `HOST` / `PORT`              | для собственных скриптов запуска           | `0.0.0.0` / `8000`                                          |
 
@@ -118,9 +125,27 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # Регенерировать openapi.json:
 .\.venv\Scripts\python.exe scripts\export_openapi.py
 
-# Прогон сквозного smoke-теста:
+# Прогон сквозного smoke-теста (отдельная БД .smoke_test.db, messenger.db не трогает):
 .\.venv\Scripts\python.exe scripts\smoke_test.py
+
+# Наполнить БД тестовыми данными (пользователи/чаты/сообщения):
+.\.venv\Scripts\python.exe scripts\seed.py
 ```
+
+После сидинга доступны пользователи `alice` (curator), `bob`, `carol`, `dave`
+(student) с паролем `password123`, личный чат alice↔bob и групповой чат «Math 101».
+
+### База данных
+
+- Движок: SQLite, файл `messenger.db` в папке `backend` (путь можно переопределить
+  переменной `DATABASE_PATH`).
+- Таблицы создаются автоматически из `app/schema.sql` при старте приложения.
+- **Пароль в `messenger.db` сам не меняется** — он пересоздаётся только если вы:
+  - запускаете `scripts\seed.py` (полная очистка и новые тестовые пользователи);
+  - удаляете файл `messenger.db` вручную;
+  - регистрируете пользователь заново с другим паролем (если никнейм свободен).
+- `scripts\smoke_test.py` использует **отдельный** файл `.smoke_test.db` и не затрагивает
+  рабочую базу для разработки.
 
 ## TypeScript-клиент для фронтенда
 

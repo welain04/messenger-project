@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Sidebar } from "../components/Sidebar";
 import { useAuth } from "../auth/AuthContext";
 import { useChats } from "../chats/ChatsContext";
-import { chatsApi, messagesApi, ApiError } from "../api";
+import { chatsApi, messagesApi, formatApiError } from "../api";
 import type { Chat, Message } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
 import { useUser } from "../users/userCache";
@@ -66,8 +66,7 @@ export const ChatPage = () => {
       // refresh sidebar (unread_count может измениться после прочтения)
       refreshChats();
     } catch (e) {
-      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
-      setError(msg);
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }
@@ -94,8 +93,7 @@ export const ChatPage = () => {
       setDraft("");
       refreshChats();
     } catch (e) {
-      const msg = e instanceof ApiError ? (typeof e.detail === "string" ? e.detail : `Ошибка ${e.status}`) : (e as Error).message;
-      setSendError(msg);
+      setSendError(formatApiError(e));
     } finally {
       setSending(false);
     }

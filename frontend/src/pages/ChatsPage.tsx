@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "../components/Sidebar";
 import { useChats } from "../chats/ChatsContext";
-import { chatsApi, usersApi, ApiError } from "../api";
+import { chatsApi, usersApi, formatApiError } from "../api";
 import type { ChatType, CreateChatRequest, User } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
 
@@ -19,35 +19,6 @@ export const ChatsPage = () => {
   const [selectedParticipants, setSelectedParticipants] = useState<User[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-
-  const humanizeCreateChatError = (e: unknown): string => {
-    if (!(e instanceof ApiError)) {
-      return (e as Error).message ?? "Не удалось создать чат";
-    }
-    if (typeof e.detail === "string") {
-      return e.detail;
-    }
-
-    // FastAPI/Pydantic validation errors (422) приходят массивом объектов.
-    if (Array.isArray(e.detail)) {
-      const hasParticipantUuidError = e.detail.some((item) => {
-        if (!item || typeof item !== "object") return false;
-        const type = (item as { type?: unknown }).type;
-        const loc = (item as { loc?: unknown }).loc;
-        return (
-          type === "uuid_parsing" &&
-          Array.isArray(loc) &&
-          loc.includes("participant_ids")
-        );
-      });
-      if (hasParticipantUuidError) {
-        return "Пользователь не выбран. Введите никнейм и кликните по пользователю в выпадающем списке, чтобы добавить его в чат.";
-      }
-      return "Проверьте заполнение формы и попробуйте снова.";
-    }
-
-    return e.message || "Не удалось создать чат";
-  };
 
   useEffect(() => {
     if (type === "personal" && selectedParticipants.length > 1) {
@@ -71,7 +42,7 @@ export const ChatsPage = () => {
         const excluded = new Set(selectedParticipants.map((u) => u.id));
         setSearchResults(users.filter((u) => !excluded.has(u.id)));
       } catch (e) {
-        const msg = e instanceof ApiError ? e.message : (e as Error).message;
+        const msg = formatApiError(e, "Ошибка поиска");
         setSearchError(msg);
       } finally {
         setSearchLoading(false);
@@ -127,7 +98,7 @@ export const ChatsPage = () => {
       setSelectedParticipants([]);
       navigate(`/chats/${created.id}`);
     } catch (e) {
-      setCreateError(humanizeCreateChatError(e));
+      setCreateError(formatApiError(e, "Не удалось создать чат"));
     } finally {
       setSubmitting(false);
     }

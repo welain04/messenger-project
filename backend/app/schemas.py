@@ -26,7 +26,7 @@ class RegisterRequest(BaseModel):
     @classmethod
     def _validate_nickname(cls, v: str) -> str:
         if not NICKNAME_RE.match(v):
-            raise ValueError("nickname must contain only letters, digits and underscore")
+            raise ValueError("Никнейм: только латинские буквы, цифры и символ _")
         return v
 
 
@@ -56,7 +56,7 @@ class UserUpdateRequest(BaseModel):
     @classmethod
     def _validate_nickname(cls, v: str) -> str:
         if not NICKNAME_RE.match(v):
-            raise ValueError("nickname must contain only letters, digits and underscore")
+            raise ValueError("Никнейм: только латинские буквы, цифры и символ _")
         return v
 
 
@@ -72,13 +72,13 @@ class ChatCreateRequest(BaseModel):
     def _validate(self) -> "ChatCreateRequest":
         unique = list({pid for pid in self.participant_ids})
         if len(unique) != len(self.participant_ids):
-            raise ValueError("participant_ids must be unique")
+            raise ValueError("Список участников не должен содержать дубликаты")
         if self.type == "personal":
             if self.title is not None:
-                raise ValueError("title is not allowed for personal chats")
+                raise ValueError("Для личного чата название не указывается")
         else:
             if not self.title or not self.title.strip():
-                raise ValueError("title is required for group chats")
+                raise ValueError("Для группового чата укажите название")
         return self
 
 
