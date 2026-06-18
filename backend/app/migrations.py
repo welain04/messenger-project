@@ -12,6 +12,10 @@ _MIGRATION_STATEMENTS: tuple[str, ...] = (
     "ALTER TABLE notifications ADD COLUMN chat_id TEXT REFERENCES chats(id) ON DELETE SET NULL",
     "ALTER TABLE notifications ADD COLUMN message_id TEXT REFERENCES messages(id) ON DELETE SET NULL",
     "CREATE INDEX IF NOT EXISTS ix_notifications_chat ON notifications (chat_id)",
+    # Этап 3: расширение профиля и подтверждение email.
+    "ALTER TABLE users ADD COLUMN first_name TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN last_name TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0",
 )
 
 

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Sidebar } from "../components/Sidebar";
 import { useAuth } from "../auth/AuthContext";
 import { useChats } from "../chats/ChatsContext";
 import { chatsApi, messagesApi, formatApiError } from "../api";
 import type { Chat, Message } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
-import { useUser } from "../users/userCache";
+import { useUser, fullNameOf } from "../users/userCache";
 
 const formatTime = (iso: string) => {
   try {
@@ -39,6 +39,35 @@ const otherParticipantId = (chat: Chat | null, currentUserId: string | undefined
   return chat.participant_ids.find((id) => id !== currentUserId) ?? null;
 };
 
+const roleLabel = (role: string) =>
+  role === "admin" ? "Админ" : role === "curator" ? "Куратор" : "Студент";
+
+const MemberRow = ({ id, isCurrent }: { id: string; isCurrent: boolean }) => {
+  const entry = useUser(id);
+  const u = entry?.user;
+  return (
+    <li>
+      <Link
+        to={`/users/${id}`}
+        className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 transition hover:bg-slate-100"
+      >
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium text-slate-900">
+            {u ? fullNameOf(u) : id.slice(0, 8) + "…"}
+            {isCurrent && <span className="text-slate-400"> (вы)</span>}
+          </p>
+          {u && <p className="truncate text-[11px] text-slate-400">@{u.nickname}</p>}
+        </div>
+        {u && (
+          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+            {roleLabel(u.role)}
+          </span>
+        )}
+      </Link>
+    </li>
+  );
+};
+
 export const ChatPage = () => {
   const { chatId } = useParams<{ chatId: string }>();
   const { user } = useAuth();
@@ -52,6 +81,8 @@ export const ChatPage = () => {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+
+  const [showMembers, setShowMembers] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -106,7 +137,11 @@ export const ChatPage = () => {
     ? "Загружается…"
     : chat.type === "group"
       ? chat.title || "Без названия"
-      : otherEntry?.user?.nickname ?? (otherId ? otherId.slice(0, 8) + "…" : "Личный чат");
+      : otherEntry?.user
+        ? fullNameOf(otherEntry.user)
+        : otherId
+          ? otherId.slice(0, 8) + "…"
+          : "Личный чат";
 
   if (!chatId) return null;
 
@@ -123,10 +158,32 @@ export const ChatPage = () => {
             >
               {chat?.type === "personal" ? "DM" : "GRP"}
             </div>
-            <p className="text-sm font-semibold text-slate-900">{headerTitle}</p>
+            {chat?.type === "personal" && otherId ? (
+              <Link
+                to={`/users/${otherId}`}
+                className="text-sm font-semibold text-slate-900 hover:text-primary-600 hover:underline"
+              >
+                {headerTitle}
+              </Link>
+            ) : (
+              <p className="text-sm font-semibold text-slate-900">{headerTitle}</p>
+            )}
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-500">
             {loading && <LoadingHint text="Обновление" />}
+            {chat?.type === "group" && (
+              <button
+                type="button"
+                onClick={() => setShowMembers((v) => !v)}
+                className={`rounded-full border px-2.5 py-0.5 transition ${
+                  showMembers
+                    ? "border-primary-300 bg-primary-50 text-primary-700"
+                    : "border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                Участники · {chat.participant_ids.length}
+              </button>
+            )}
             <button
               type="button"
               onClick={loadAll}
@@ -137,6 +194,19 @@ export const ChatPage = () => {
             </button>
           </div>
         </header>
+
+        {chat?.type === "group" && showMembers && (
+          <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Участники ({chat.participant_ids.length})
+            </p>
+            <ul className="max-h-56 space-y-0.5 overflow-y-auto">
+              {chat.participant_ids.map((id) => (
+                <MemberRow key={id} id={id} isCurrent={id === user?.id} />
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto bg-slate-50 px-3 py-3 text-xs sm:px-5">
           {error && <ErrorBox message={error} onRetry={loadAll} />}

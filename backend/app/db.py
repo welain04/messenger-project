@@ -28,6 +28,17 @@ def _db_path() -> str:
     return str(BASE_DIR / "messenger.db")
 
 
+def database_url() -> str:
+    """URL подключения для Alembic/SQLAlchemy.
+
+    Приоритет: явный DATABASE_URL -> SQLite по DATABASE_PATH/умолчанию.
+    """
+    settings = get_settings()
+    if settings.DATABASE_URL.strip():
+        return settings.DATABASE_URL.strip()
+    return f"sqlite:///{_db_path()}"
+
+
 def get_connection() -> sqlite3.Connection:
     global _conn
     if _conn is None:
@@ -42,12 +53,22 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Создаёт таблицы из schema.sql (идемпотентно)."""
-    conn = get_connection()
-    with lock:
-        conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-        run_migrations(conn)
-        conn.commit()
+    """Применяет миграции Alembic до последней версии (идемпотентно).
+
+    Baseline-миграция повторяет schema.sql (CREATE ... IF NOT EXISTS), поэтому
+    безопасна и для пустой, и для уже существующей базы. Для старых SQLite-баз,
+    созданных до Alembic, дополнительно прогоняем легаси ADD COLUMN-миграции.
+    """
+    from . import dialect
+    from .alembic_runner import upgrade_to_head
+
+    upgrade_to_head()
+
+    if dialect.is_sqlite():
+        conn = get_connection()
+        with lock:
+            run_migrations(conn)
+            conn.commit()
 
 
 def close_connection() -> None:

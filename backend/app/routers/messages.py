@@ -2,9 +2,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from .. import storage
-from ..deps import get_current_user
-from ..models import Chat, Message, Notification, UserInDB, UserRole
+from .. import audit, storage
+from ..deps import get_current_user, require_verified_email
+from ..models import Chat, Message, Notification, UserInDB
+from ..permissions import Permission, has_permission
 from ..schemas import MessageCreateRequest, MessageOut, MessageUpdateRequest
 
 router = APIRouter(tags=["messages"])
@@ -53,7 +54,7 @@ def list_messages(
 def send_message(
     chat_id: UUID,
     payload: MessageCreateRequest,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> MessageOut:
     chat = _get_chat_or_404(chat_id)
     _ensure_participant(chat, current)
@@ -96,9 +97,19 @@ def delete_message(
     current: UserInDB = Depends(get_current_user),
 ) -> None:
     msg = _get_message_or_404(message_id)
-    if msg.author_id != current.id and current.role != UserRole.curator:
+    is_author = msg.author_id == current.id
+    if not is_author and not has_permission(current.role, Permission.DELETE_ANY_MESSAGE):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Удалить сообщение может только автор или куратор",
         )
     storage.soft_delete_message(message_id)
+    if not is_author:
+        # Удаление чужого сообщения модератором — фиксируем в аудите.
+        audit.record(
+            "message.deleted_by_moderator",
+            "message",
+            actor_id=current.id,
+            entity_id=message_id,
+            data={"chat_id": str(msg.chat_id), "author_id": str(msg.author_id)},
+        )

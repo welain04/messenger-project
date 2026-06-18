@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   BellIcon,
@@ -8,10 +8,49 @@ import {
 } from "@heroicons/react/24/outline";
 import logoAsterisk from "../assets/logo-asterisk.png";
 import { useAuth } from "../auth/AuthContext";
+import { formatApiError } from "../api";
 
 interface LayoutProps {
   children: ReactNode;
 }
+
+const VerifyEmailBanner = () => {
+  const { resendVerification } = useAuth();
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [note, setNote] = useState<string>("");
+
+  const onResend = async () => {
+    setState("sending");
+    setNote("");
+    try {
+      await resendVerification();
+      setState("sent");
+      setNote("Письмо отправлено. Проверьте почту.");
+    } catch (e) {
+      setState("error");
+      setNote(formatApiError(e));
+    }
+  };
+
+  return (
+    <div className="border-b border-amber-200 bg-amber-50">
+      <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-2 text-xs text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+        <span>
+          Подтвердите email, чтобы отправлять сообщения и создавать чаты.
+          {note && <span className="ml-2 font-medium">{note}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={state === "sending"}
+          className="self-start rounded-full border border-amber-300 bg-white px-3 py-1 font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-60 sm:self-auto"
+        >
+          {state === "sending" ? "Отправляем…" : "Отправить письмо повторно"}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
@@ -98,6 +137,8 @@ export const Layout = ({ children }: LayoutProps) => {
           </div>
         </div>
       </header>
+
+      {user && user.email_verified === false && <VerifyEmailBanner />}
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 px-4 py-6 sm:py-10">{children}</main>
     </div>

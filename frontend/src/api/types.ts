@@ -4,14 +4,19 @@
 export type UUID = string;
 export type ISODateTime = string;
 
-export type UserRole = "student" | "curator";
+export type UserRole = "student" | "curator" | "admin";
 export type ChatType = "personal" | "group";
 
 export interface User {
   id: UUID;
   nickname: string;
   role: UserRole;
+  first_name: string;
+  last_name: string;
   created_at: ISODateTime;
+  // Приватные поля (приходят только в /users/me и ответах auth).
+  email?: string;
+  email_verified?: boolean;
 }
 
 export interface MessagePreview {
@@ -55,7 +60,27 @@ export interface Notification {
 export interface RegisterRequest {
   nickname: string;
   password: string;
-  role: UserRole;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
 }
 
 export interface LoginRequest {
@@ -65,7 +90,32 @@ export interface LoginRequest {
 
 export interface TokenResponse {
   access_token: string;
+  refresh_token: string;
   token_type: "bearer";
+  expires_in: number;
+}
+
+export interface Session {
+  id: UUID;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: ISODateTime;
+  last_seen_at: ISODateTime;
+  current: boolean;
+}
+
+export type RoleUpgradeStatus = "pending" | "approved" | "rejected";
+
+export interface RoleUpgradeRequest {
+  id: UUID;
+  user_id: UUID;
+  requested_role: UserRole;
+  status: RoleUpgradeStatus;
+  reason: string | null;
+  reviewed_by: UUID | null;
+  review_note: string | null;
+  created_at: ISODateTime;
+  reviewed_at: ISODateTime | null;
 }
 
 export interface UpdateUserRequest {

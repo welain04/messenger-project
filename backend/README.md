@@ -1,8 +1,10 @@
 # Online School Messenger — Backend
 
 FastAPI-бэкенд мессенджера онлайн-школы. Хранение данных — в **SQLite** (файл
-`messenger.db`, отдельный сервер БД не нужен). Схема создаётся автоматически при
-старте из `app/schema.sql` (адаптация `db-design.md` под SQLite). Авторизация —
+`messenger.db`, отдельный сервер БД не нужен). Схема применяется автоматически при
+старте через **миграции Alembic** (`alembic upgrade head` в `init_db`); baseline-
+миграция повторяет снимок `app/schema.sql` (адаптация `db-design.md` под SQLite).
+Подготовка к PostgreSQL описана в `../docs/postgres-migration.md`. Авторизация —
 JWT (HS256), пароли — bcrypt (passlib).
 
 ## Структура
@@ -16,8 +18,10 @@ backend/
     middleware.py      # JWTUserMiddleware -> request.state.user
     deps.py            # get_current_user / get_current_user_or_none
     security.py        # хеш паролей, create/decode JWT
-    db.py              # подключение к SQLite, init_db(), хелперы запросов
-    schema.sql         # DDL всех таблиц (SQLite)
+    db.py              # подключение к SQLite, init_db() (Alembic), database_url()
+    dialect.py         # различия SQLite/PostgreSQL (диалект, LIKE/ILIKE, bool)
+    alembic_runner.py  # программный запуск миграций Alembic
+    schema.sql         # снимок DDL v1 (используется baseline-миграцией)
     storage.py         # слой доступа к данным (SQL-запросы), модели на входе/выходе
     models.py          # dataclass-модели UserInDB, Chat, Message, Notification
     schemas.py         # Pydantic-схемы запросов/ответов
@@ -31,6 +35,8 @@ backend/
     export_openapi.py  # пишет openapi.json
     smoke_test.py      # сквозной TestClient-сценарий
     seed.py            # наполнение БД тестовыми данными
+  alembic.ini          # конфигурация Alembic
+  alembic/             # env.py + versions/ (миграции схемы)
   messenger.db         # файл SQLite (создаётся автоматически, в .gitignore)
   requirements.txt
   .env / .env.example
@@ -70,6 +76,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `JWT_ALGORITHM`              | алгоритм JWT                               | `HS256`                                                     |
 | `ACCESS_TOKEN_EXPIRE_MINUTES`| TTL access-токена в минутах                | `1440`                                                      |
 | `DATABASE_PATH`              | путь к файлу SQLite                        | `<backend>/messenger.db`                                    |
+| `DATABASE_URL`              | URL для Alembic/Postgres (пусто → SQLite)  | _(пусто)_                                                   |
 | `CORS_ORIGINS`               | разрешённые origin'ы через запятую         | `http://localhost:5173,http://127.0.0.1:5173`               |
 | `HOST` / `PORT`              | для собственных скриптов запуска           | `0.0.0.0` / `8000`                                          |
 
@@ -139,7 +146,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 - Движок: SQLite, файл `messenger.db` в папке `backend` (путь можно переопределить
   переменной `DATABASE_PATH`).
-- Таблицы создаются автоматически из `app/schema.sql` при старте приложения.
+- Таблицы применяются миграциями Alembic при старте приложения (`init_db` →
+  `alembic upgrade head`). Изменения схемы оформляются новыми ревизиями Alembic
+  (`cd backend && alembic revision -m "..."`), а не правкой `schema.sql`.
 - **Пароль в `messenger.db` сам не меняется** — он пересоздаётся только если вы:
   - запускаете `scripts\seed.py` (полная очистка и новые тестовые пользователи);
   - удаляете файл `messenger.db` вручную;

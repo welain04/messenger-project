@@ -17,7 +17,13 @@ const cache = new Map<UUID, Entry>();
 const inflight = new Map<UUID, Promise<void>>();
 const listeners = new Set<() => void>();
 
+// Версия инкрементируется при каждом изменении кэша. getSnapshot возвращает
+// именно её (число), иначе useSyncExternalStore не увидит изменений в Map
+// (ссылка на Map не меняется) и не перерисует компонент при дозагрузке.
+let version = 0;
+
 function notify() {
+  version += 1;
   for (const l of listeners) l();
 }
 
@@ -49,7 +55,7 @@ const subscribe = (cb: () => void) => {
   return () => listeners.delete(cb);
 };
 
-const getSnapshot = () => cache;
+const getSnapshot = () => version;
 
 export function useUser(id: UUID | undefined | null): Entry | undefined {
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
@@ -65,4 +71,11 @@ export function nicknameOf(id: UUID | undefined | null): string {
   const entry = cache.get(id);
   if (entry?.status === "ok" && entry.user) return entry.user.nickname;
   return id.slice(0, 8) + "…";
+}
+
+/** Полное имя пользователя («Имя Фамилия») с откатом на никнейм. */
+export function fullNameOf(user: User | undefined | null): string {
+  if (!user) return "";
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+  return name || user.nickname;
 }

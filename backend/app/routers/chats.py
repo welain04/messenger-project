@@ -2,9 +2,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from .. import storage
-from ..deps import get_current_user
-from ..models import Chat, Notification, UserInDB, UserRole
+from .. import audit, storage
+from ..deps import get_current_user, require_verified_email
+from ..models import Chat, Notification, UserInDB
+from ..permissions import Permission, has_permission
 from ..schemas import (
     AddParticipantRequest,
     ChatCreateRequest,
@@ -28,12 +29,29 @@ def _ensure_participant(chat: Chat, user: UserInDB) -> None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Вы не участник этого чата")
 
 
-def _ensure_can_manage(chat: Chat, user: UserInDB) -> None:
-    if user.id != chat.created_by and user.role != UserRole.curator:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Управлять чатом может только создатель или куратор",
-        )
+def _ensure_can_manage_members(chat: Chat, user: UserInDB) -> None:
+    # Управлять участниками может владелец чата (chat-scoped) либо обладатель
+    # глобального права manage_chat_members (curator/admin).
+    if user.id == chat.created_by:
+        return
+    if has_permission(user.role, Permission.MANAGE_CHAT_MEMBERS):
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Управлять участниками может создатель чата или куратор",
+    )
+
+
+def _ensure_can_edit_chat(chat: Chat, user: UserInDB) -> None:
+    # Изменять/удалять чат может владелец либо обладатель права edit_chat.
+    if user.id == chat.created_by:
+        return
+    if has_permission(user.role, Permission.EDIT_CHAT):
+        return
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Изменять чат может создатель или куратор",
+    )
 
 
 def _build_preview(chat: Chat) -> MessagePreview | None:
@@ -64,8 +82,17 @@ def _to_detail(chat: Chat, current: UserInDB) -> ChatDetail:
 @router.post("", response_model=ChatDetail, status_code=status.HTTP_201_CREATED)
 def create_chat(
     payload: ChatCreateRequest,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> ChatDetail:
+    required_perm = (
+        Permission.CREATE_GROUP_CHAT if payload.type == "group" else Permission.CREATE_CHAT
+    )
+    if not has_permission(current.role, required_perm):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Недостаточно прав для создания чата этого типа",
+        )
+
     participants = list(dict.fromkeys([current.id, *payload.participant_ids]))
 
     for pid in participants:
@@ -148,7 +175,7 @@ def add_participant(
     current: UserInDB = Depends(get_current_user),
 ) -> ChatDetail:
     chat = _get_chat_or_404(chat_id)
-    _ensure_can_manage(chat, current)
+    _ensure_can_manage_members(chat, current)
     if chat.type != "group":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Добавлять участников можно только в групповой чат")
     if not storage.user_exists(payload.user_id):
@@ -173,7 +200,7 @@ def remove_participant(
     current: UserInDB = Depends(get_current_user),
 ) -> None:
     chat = _get_chat_or_404(chat_id)
-    _ensure_can_manage(chat, current)
+    _ensure_can_manage_members(chat, current)
     if chat.type != "group":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Удалять участников можно только из группового чата")
     if user_id not in chat.participant_ids:
@@ -187,5 +214,12 @@ def remove_participant(
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_chat(chat_id: UUID, current: UserInDB = Depends(get_current_user)) -> None:
     chat = _get_chat_or_404(chat_id)
-    _ensure_can_manage(chat, current)
+    _ensure_can_edit_chat(chat, current)
     storage.delete_chat(chat_id)
+    audit.record(
+        "chat.deleted",
+        "chat",
+        actor_id=current.id,
+        entity_id=chat_id,
+        data={"type": chat.type, "by_owner": current.id == chat.created_by},
+    )

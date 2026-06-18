@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { formatApiError } from "../api";
-import type { UserRole } from "../api";
 import { ErrorBox } from "../components/States";
 
 type Mode = "login" | "register";
@@ -16,7 +15,9 @@ export const AuthPage = () => {
   const [mode, setMode] = useState<Mode>("login");
   const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("student");
+  const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,13 @@ export const AuthPage = () => {
       if (mode === "login") {
         await login({ nickname, password });
       } else {
-        await register({ nickname, password, role });
+        await register({
+          nickname,
+          password,
+          email,
+          first_name: firstName,
+          last_name: lastName,
+        });
       }
       const redirectTo = (location.state as { from?: string } | null)?.from ?? "/chats";
       navigate(redirectTo, { replace: true });
@@ -89,6 +96,49 @@ export const AuthPage = () => {
           />
         </div>
 
+        {mode === "register" && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs text-slate-600">Имя</label>
+              <input
+                required
+                minLength={1}
+                maxLength={50}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
+                placeholder="Алиса"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-600">Фамилия</label>
+              <input
+                required
+                minLength={1}
+                maxLength={50}
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
+                placeholder="Андерсон"
+              />
+            </div>
+          </div>
+        )}
+
+        {mode === "register" && (
+          <div>
+            <label className="mb-1 block text-xs text-slate-600">Email</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
+              placeholder="you@example.com"
+            />
+          </div>
+        )}
+
         <div>
           <label className="mb-1 block text-xs text-slate-600">Пароль</label>
           <div className="relative">
@@ -117,18 +167,20 @@ export const AuthPage = () => {
           </div>
         </div>
 
-        {mode === "register" && (
-          <div>
-            <label className="mb-1 block text-xs text-slate-600">Роль</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 focus:border-primary-500 focus:ring-1"
-            >
-              <option value="student">Ученик</option>
-              <option value="curator">Куратор</option>
-            </select>
+        {mode === "login" && (
+          <div className="text-right">
+            <Link to="/forgot-password" className="text-xs text-primary-600 hover:underline">
+              Забыли пароль?
+            </Link>
           </div>
+        )}
+
+        {mode === "register" && (
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Новый аккаунт создаётся с ролью «Ученик». После регистрации
+            подтвердите email по ссылке из письма — до этого отправка сообщений
+            и создание чатов недоступны.
+          </p>
         )}
 
         {error && <ErrorBox message={error} />}

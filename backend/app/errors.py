@@ -10,12 +10,18 @@ from starlette.requests import Request
 _FIELD_NAMES: dict[str, str] = {
     "nickname": "Никнейм",
     "password": "Пароль",
+    "current_password": "Текущий пароль",
+    "new_password": "Новый пароль",
     "role": "Роль",
+    "email": "Email",
+    "first_name": "Имя",
+    "last_name": "Фамилия",
     "text": "Текст сообщения",
     "title": "Название чата",
     "participant_ids": "Участники",
     "type": "Тип чата",
     "user_id": "Пользователь",
+    "token": "Токен",
 }
 
 
@@ -35,6 +41,8 @@ def _translate_validation_item(err: dict) -> str:
 
     # Кастомные ValueError из Pydantic model_validator / field_validator
     if err_type == "value_error":
+        if "email" in loc and "valid email" in msg.lower():
+            return "Email: некорректный адрес"
         if msg.startswith("Value error, "):
             return msg.removeprefix("Value error, ")
         return msg

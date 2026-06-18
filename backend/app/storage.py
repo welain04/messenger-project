@@ -7,20 +7,24 @@ SQL-запросы к базе (см. app/db.py и app/schema.sql). Функци
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from . import db
+from . import db, dialect
 from .models import Chat, Message, Notification, UserInDB, UserRole
 
 # Порядок удаления: сначала зависимые таблицы, затем родительские.
 _ALL_TABLES = [
     "audit_logs",
+    "role_upgrade_requests",
     "chat_roles",
     "chat_invites",
     "user_blocks",
     "message_reactions",
+    "email_verification_tokens",
+    "password_reset_tokens",
     "user_sessions",
     "attachments",
     "notifications",
@@ -70,12 +74,18 @@ def _now_str() -> str:
 
 
 def _row_to_user(r: sqlite3.Row) -> UserInDB:
+    keys = r.keys()
     return UserInDB(
         nickname=r["nickname"],
         role=UserRole(r["role"]),
         hashed_password=r["password_hash"],
+        email=(r["email"] or "") if "email" in keys else "",
+        first_name=(r["first_name"] or "") if "first_name" in keys else "",
+        last_name=(r["last_name"] or "") if "last_name" in keys else "",
+        email_verified=bool(r["email_verified"]) if "email_verified" in keys else False,
         id=UUID(r["id"]),
         created_at=_parse(r["created_at"]),
+        is_active=bool(r["is_active"]),
     )
 
 
@@ -119,10 +129,14 @@ def reset_storage() -> None:
     """Полная очистка всех таблиц (для тестов и сидинга)."""
     conn = db.get_connection()
     with db.lock:
-        conn.execute("PRAGMA foreign_keys=OFF;")
-        for table in _ALL_TABLES:
-            conn.execute(f"DELETE FROM {table};")
-        conn.execute("PRAGMA foreign_keys=ON;")
+        if dialect.is_sqlite():
+            conn.execute("PRAGMA foreign_keys=OFF;")
+            for table in _ALL_TABLES:
+                conn.execute(f"DELETE FROM {table};")
+            conn.execute("PRAGMA foreign_keys=ON;")
+        else:
+            for table in _ALL_TABLES:
+                conn.execute(f"DELETE FROM {table};")
         conn.commit()
 
 
@@ -134,9 +148,22 @@ def create_user(user: UserInDB) -> None:
     db.execute_script(
         [
             (
-                "INSERT INTO users (id, nickname, password_hash, role, created_at, updated_at) "
-                "VALUES (?,?,?,?,?,?)",
-                (str(user.id), user.nickname, user.hashed_password, user.role.value, ts, ts),
+                "INSERT INTO users "
+                "(id, nickname, password_hash, role, first_name, last_name, email, "
+                "email_verified, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    str(user.id),
+                    user.nickname,
+                    user.hashed_password,
+                    user.role.value,
+                    user.first_name,
+                    user.last_name,
+                    user.email,
+                    1 if user.email_verified else 0,
+                    ts,
+                    ts,
+                ),
             ),
             (
                 "INSERT INTO user_privacy_settings (user_id, updated_at) VALUES (?,?)",
@@ -180,6 +207,379 @@ def update_nickname(user_id: UUID, new_nickname: str) -> None:
     )
 
 
+def update_password(user_id: UUID, password_hash: str) -> None:
+    db.execute(
+        "UPDATE users SET password_hash=?, updated_at=? WHERE id=?",
+        (password_hash, _now_str(), str(user_id)),
+    )
+
+
+def set_role(user_id: UUID, role: UserRole) -> None:
+    """Назначение роли пользователю (админское действие / сидинг)."""
+    db.execute(
+        "UPDATE users SET role=?, updated_at=? WHERE id=?",
+        (role.value, _now_str(), str(user_id)),
+    )
+
+
+def set_active(user_id: UUID, is_active: bool) -> None:
+    """Блокировка / разблокировка пользователя (админское действие)."""
+    db.execute(
+        "UPDATE users SET is_active=?, updated_at=? WHERE id=?",
+        (1 if is_active else 0, _now_str(), str(user_id)),
+    )
+
+
+def list_users(limit: int = 100, offset: int = 0) -> list[UserInDB]:
+    rows = db.query_all(
+        "SELECT * FROM users WHERE deleted_at IS NULL "
+        "ORDER BY created_at LIMIT ? OFFSET ?",
+        (limit, offset),
+    )
+    return [_row_to_user(r) for r in rows]
+
+
+def count_active_admins() -> int:
+    """Число активных админов — для защиты от блокировки последнего admin."""
+    r = db.query_one(
+        "SELECT COUNT(*) AS c FROM users "
+        "WHERE role='admin' AND is_active=1 AND deleted_at IS NULL"
+    )
+    return int(r["c"]) if r else 0
+
+
+def get_user_by_email(email: str) -> UserInDB | None:
+    r = db.query_one(
+        "SELECT * FROM users WHERE email=? AND deleted_at IS NULL", (email,)
+    )
+    return _row_to_user(r) if r else None
+
+
+def mark_email_verified(user_id: UUID) -> None:
+    db.execute(
+        "UPDATE users SET email_verified=1, updated_at=? WHERE id=?",
+        (_now_str(), str(user_id)),
+    )
+
+
+# --------------------------- email verification tokens ---------------------------
+
+
+def create_email_verification_token(
+    user_id: UUID, email: str, token_hash: str, expires_at: datetime
+) -> None:
+    """Создаёт новый токен подтверждения, инвалидируя прежние активные токены."""
+    now = _now_str()
+    db.execute_script(
+        [
+            (
+                "UPDATE email_verification_tokens SET consumed_at=? "
+                "WHERE user_id=? AND consumed_at IS NULL",
+                (now, str(user_id)),
+            ),
+            (
+                "INSERT INTO email_verification_tokens "
+                "(id, user_id, token_hash, email, created_at, expires_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (str(uuid4()), str(user_id), token_hash, email, now, _fmt(expires_at)),
+            ),
+        ]
+    )
+
+
+def get_active_email_token(token_hash: str) -> sqlite3.Row | None:
+    """Возвращает неиспользованный и неистёкший токен по его хэшу."""
+    return db.query_one(
+        "SELECT * FROM email_verification_tokens "
+        "WHERE token_hash=? AND consumed_at IS NULL AND expires_at > ?",
+        (token_hash, _now_str()),
+    )
+
+
+def consume_email_token(token_id: str | UUID) -> None:
+    db.execute(
+        "UPDATE email_verification_tokens SET consumed_at=? WHERE id=?",
+        (_now_str(), str(token_id)),
+    )
+
+
+def last_email_token_created_at(user_id: UUID) -> datetime | None:
+    r = db.query_one(
+        "SELECT created_at FROM email_verification_tokens "
+        "WHERE user_id=? ORDER BY created_at DESC LIMIT 1",
+        (str(user_id),),
+    )
+    return _parse(r["created_at"]) if r else None
+
+
+def count_email_tokens_since(user_id: UUID, since: datetime) -> int:
+    r = db.query_one(
+        "SELECT COUNT(*) AS c FROM email_verification_tokens "
+        "WHERE user_id=? AND created_at >= ?",
+        (str(user_id), _fmt(since)),
+    )
+    return int(r["c"]) if r else 0
+
+
+# --------------------------- password reset tokens ---------------------------
+
+
+def create_password_reset_token(
+    user_id: UUID, token_hash: str, expires_at: datetime
+) -> None:
+    """Создаёт новый токен сброса пароля, инвалидируя прежние активные."""
+    now = _now_str()
+    db.execute_script(
+        [
+            (
+                "UPDATE password_reset_tokens SET consumed_at=? "
+                "WHERE user_id=? AND consumed_at IS NULL",
+                (now, str(user_id)),
+            ),
+            (
+                "INSERT INTO password_reset_tokens "
+                "(id, user_id, token_hash, created_at, expires_at) "
+                "VALUES (?,?,?,?,?)",
+                (str(uuid4()), str(user_id), token_hash, now, _fmt(expires_at)),
+            ),
+        ]
+    )
+
+
+def get_active_password_reset_token(token_hash: str) -> sqlite3.Row | None:
+    return db.query_one(
+        "SELECT * FROM password_reset_tokens "
+        "WHERE token_hash=? AND consumed_at IS NULL AND expires_at > ?",
+        (token_hash, _now_str()),
+    )
+
+
+def consume_password_reset_token(token_id: str | UUID) -> None:
+    db.execute(
+        "UPDATE password_reset_tokens SET consumed_at=? WHERE id=?",
+        (_now_str(), str(token_id)),
+    )
+
+
+def last_password_reset_token_created_at(user_id: UUID) -> datetime | None:
+    r = db.query_one(
+        "SELECT created_at FROM password_reset_tokens "
+        "WHERE user_id=? ORDER BY created_at DESC LIMIT 1",
+        (str(user_id),),
+    )
+    return _parse(r["created_at"]) if r else None
+
+
+def count_password_reset_tokens_since(user_id: UUID, since: datetime) -> int:
+    r = db.query_one(
+        "SELECT COUNT(*) AS c FROM password_reset_tokens "
+        "WHERE user_id=? AND created_at >= ?",
+        (str(user_id), _fmt(since)),
+    )
+    return int(r["c"]) if r else 0
+
+
+# --------------------------- user sessions (refresh tokens) ---------------------------
+
+
+def create_session(
+    user_id: UUID,
+    refresh_token_hash: str,
+    expires_at: datetime,
+    user_agent: str | None = None,
+    ip: str | None = None,
+) -> UUID:
+    session_id = uuid4()
+    now = _now_str()
+    db.execute(
+        "INSERT INTO user_sessions "
+        "(id, user_id, refresh_token_hash, user_agent, ip, created_at, last_seen_at, expires_at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (
+            str(session_id),
+            str(user_id),
+            refresh_token_hash,
+            user_agent,
+            ip,
+            now,
+            now,
+            _fmt(expires_at),
+        ),
+    )
+    return session_id
+
+
+def get_active_session_by_refresh(refresh_token_hash: str) -> sqlite3.Row | None:
+    return db.query_one(
+        "SELECT * FROM user_sessions "
+        "WHERE refresh_token_hash=? AND revoked_at IS NULL AND expires_at > ?",
+        (refresh_token_hash, _now_str()),
+    )
+
+
+def get_session(session_id: str | UUID) -> sqlite3.Row | None:
+    return db.query_one(
+        "SELECT * FROM user_sessions WHERE id=?", (str(session_id),)
+    )
+
+
+def rotate_session(
+    session_id: str | UUID, new_refresh_token_hash: str, new_expires_at: datetime
+) -> None:
+    now = _now_str()
+    db.execute(
+        "UPDATE user_sessions "
+        "SET refresh_token_hash=?, last_seen_at=?, expires_at=? "
+        "WHERE id=?",
+        (new_refresh_token_hash, now, _fmt(new_expires_at), str(session_id)),
+    )
+
+
+def revoke_session(session_id: str | UUID) -> int:
+    return db.execute(
+        "UPDATE user_sessions SET revoked_at=? WHERE id=? AND revoked_at IS NULL",
+        (_now_str(), str(session_id)),
+    )
+
+
+def revoke_session_by_refresh(refresh_token_hash: str) -> int:
+    return db.execute(
+        "UPDATE user_sessions SET revoked_at=? "
+        "WHERE refresh_token_hash=? AND revoked_at IS NULL",
+        (_now_str(), refresh_token_hash),
+    )
+
+
+def revoke_all_sessions(user_id: UUID) -> int:
+    return db.execute(
+        "UPDATE user_sessions SET revoked_at=? "
+        "WHERE user_id=? AND revoked_at IS NULL",
+        (_now_str(), str(user_id)),
+    )
+
+
+def list_active_sessions(user_id: UUID) -> list[sqlite3.Row]:
+    return db.query_all(
+        "SELECT * FROM user_sessions "
+        "WHERE user_id=? AND revoked_at IS NULL AND expires_at > ? "
+        "ORDER BY last_seen_at DESC",
+        (str(user_id), _now_str()),
+    )
+
+
+# --------------------------- audit logs ---------------------------
+
+
+def create_audit_log(
+    action: str,
+    entity_type: str,
+    actor_id: UUID | None = None,
+    entity_id: str | UUID | None = None,
+    data: dict | None = None,
+) -> None:
+    db.execute(
+        "INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, data, created_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (
+            str(uuid4()),
+            str(actor_id) if actor_id else None,
+            action,
+            entity_type,
+            str(entity_id) if entity_id else None,
+            json.dumps(data or {}, ensure_ascii=False),
+            _now_str(),
+        ),
+    )
+
+
+def list_audit_logs(
+    limit: int = 50,
+    offset: int = 0,
+    action: str | None = None,
+    entity_type: str | None = None,
+    actor_id: UUID | None = None,
+) -> list[sqlite3.Row]:
+    clauses: list[str] = []
+    params: list = []
+    if action:
+        clauses.append("action = ?")
+        params.append(action)
+    if entity_type:
+        clauses.append("entity_type = ?")
+        params.append(entity_type)
+    if actor_id:
+        clauses.append("actor_id = ?")
+        params.append(str(actor_id))
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.extend([limit, offset])
+    return db.query_all(
+        f"SELECT * FROM audit_logs{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        tuple(params),
+    )
+
+
+# --------------------------- role upgrade requests ---------------------------
+
+
+def create_role_upgrade_request(
+    user_id: UUID, requested_role: str, reason: str | None
+) -> sqlite3.Row:
+    request_id = uuid4()
+    db.execute(
+        "INSERT INTO role_upgrade_requests "
+        "(id, user_id, requested_role, status, reason, created_at) "
+        "VALUES (?,?,?,'pending',?,?)",
+        (str(request_id), str(user_id), requested_role, reason, _now_str()),
+    )
+    row = get_role_upgrade_request(request_id)
+    assert row is not None
+    return row
+
+
+def get_role_upgrade_request(request_id: str | UUID) -> sqlite3.Row | None:
+    return db.query_one(
+        "SELECT * FROM role_upgrade_requests WHERE id=?", (str(request_id),)
+    )
+
+
+def get_pending_request_for_user(user_id: UUID) -> sqlite3.Row | None:
+    return db.query_one(
+        "SELECT * FROM role_upgrade_requests "
+        "WHERE user_id=? AND status='pending'",
+        (str(user_id),),
+    )
+
+
+def list_role_upgrade_requests(
+    status: str | None = None, limit: int = 100, offset: int = 0
+) -> list[sqlite3.Row]:
+    where = " WHERE status = ?" if status else ""
+    params: list = [status] if status else []
+    params.extend([limit, offset])
+    return db.query_all(
+        f"SELECT * FROM role_upgrade_requests{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        tuple(params),
+    )
+
+
+def list_role_upgrade_requests_for_user(user_id: UUID) -> list[sqlite3.Row]:
+    return db.query_all(
+        "SELECT * FROM role_upgrade_requests WHERE user_id=? ORDER BY created_at DESC",
+        (str(user_id),),
+    )
+
+
+def review_role_upgrade_request(
+    request_id: str | UUID, status: str, reviewed_by: UUID, note: str | None
+) -> None:
+    db.execute(
+        "UPDATE role_upgrade_requests "
+        "SET status=?, reviewed_by=?, review_note=?, reviewed_at=? "
+        "WHERE id=?",
+        (status, str(reviewed_by), note, _now_str(), str(request_id)),
+    )
+
+
 def touch_last_seen(user_id: UUID) -> None:
     db.execute(
         "UPDATE users SET last_seen_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL",
@@ -189,10 +589,11 @@ def touch_last_seen(user_id: UUID) -> None:
 
 def search_users(query: str, exclude_id: UUID, limit: int) -> list[UserInDB]:
     like = f"%{query.strip()}%"
+    like_op = dialect.like_operator()
     rows = db.query_all(
         "SELECT u.* FROM users u "
         "JOIN user_privacy_settings p ON p.user_id = u.id "
-        "WHERE u.deleted_at IS NULL AND u.id <> ? AND p.searchable = 1 AND u.nickname LIKE ? "
+        f"WHERE u.deleted_at IS NULL AND u.id <> ? AND p.searchable = 1 AND u.nickname {like_op} ? "
         "ORDER BY u.nickname COLLATE NOCASE LIMIT ?",
         (str(exclude_id), like, limit),
     )

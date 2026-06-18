@@ -16,6 +16,7 @@ def _utcnow() -> datetime:
 class UserRole(str, Enum):
     student = "student"
     curator = "curator"
+    admin = "admin"
 
 
 ChatType = Literal["personal", "group"]
@@ -26,8 +27,13 @@ class UserInDB:
     nickname: str
     role: UserRole
     hashed_password: str
+    email: str = ""
+    first_name: str = ""
+    last_name: str = ""
+    email_verified: bool = False
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=_utcnow)
+    is_active: bool = True
 
 
 @dataclass

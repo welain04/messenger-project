@@ -7,27 +7,69 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from .models import UserRole
 
 NICKNAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
+# Имя/фамилия: буквы (лат./кир.), пробел, дефис, апостроф.
+NAME_RE = re.compile(r"^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё '\-]*$")
+
+# Зарезервированные никнеймы (нельзя занять при регистрации/смене).
+RESERVED_NICKNAMES = {
+    "admin", "administrator", "root", "system", "support",
+    "moderator", "curator", "me", "null", "undefined",
+}
+
+
+def _validate_nickname_value(v: str) -> str:
+    if not NICKNAME_RE.match(v):
+        raise ValueError("Никнейм: только латинские буквы, цифры и символ _")
+    if v.lower() in RESERVED_NICKNAMES:
+        raise ValueError("Этот никнейм зарезервирован")
+    return v
+
+
+def _validate_name_value(v: str, field_label: str) -> str:
+    v = v.strip()
+    if not NAME_RE.match(v):
+        raise ValueError(f"{field_label}: только буквы, пробел, дефис и апостроф")
+    return v
 
 
 # ----------------------------- Auth / User -----------------------------
 
 
 class RegisterRequest(BaseModel):
+    # Роль НЕ принимается от клиента: все новые пользователи — student.
+    # Повышение до curator/admin выполняется только через админский флоу.
     nickname: str = Field(..., min_length=3, max_length=30)
     password: str = Field(..., min_length=6, max_length=100)
-    role: UserRole
+    email: EmailStr
+    first_name: str = Field(..., min_length=1, max_length=50)
+    last_name: str = Field(..., min_length=1, max_length=50)
 
     @field_validator("nickname")
     @classmethod
     def _validate_nickname(cls, v: str) -> str:
-        if not NICKNAME_RE.match(v):
-            raise ValueError("Никнейм: только латинские буквы, цифры и символ _")
-        return v
+        return _validate_nickname_value(v)
+
+    @field_validator("first_name")
+    @classmethod
+    def _validate_first_name(cls, v: str) -> str:
+        return _validate_name_value(v, "Имя")
+
+    @field_validator("last_name")
+    @classmethod
+    def _validate_last_name(cls, v: str) -> str:
+        return _validate_name_value(v, "Фамилия")
 
 
 class LoginRequest(BaseModel):
@@ -37,16 +79,64 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: Literal["bearer"] = "bearer"
+    expires_in: int  # время жизни access-токена в секундах
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=1)
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None
+
+
+class SessionOut(BaseModel):
+    id: UUID
+    user_agent: str | None = None
+    ip: str | None = None
+    created_at: datetime
+    last_seen_at: datetime
+    current: bool = False
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=100)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=100)
 
 
 class UserPublic(BaseModel):
+    """Публичная карточка пользователя (видна другим). Без email."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     nickname: str
     role: UserRole
+    first_name: str
+    last_name: str
     created_at: datetime
+
+
+class MePrivate(UserPublic):
+    """Данные о себе — дополнительно содержат приватные поля."""
+
+    email: str
+    email_verified: bool
 
 
 class UserUpdateRequest(BaseModel):
@@ -55,9 +145,56 @@ class UserUpdateRequest(BaseModel):
     @field_validator("nickname")
     @classmethod
     def _validate_nickname(cls, v: str) -> str:
-        if not NICKNAME_RE.match(v):
-            raise ValueError("Никнейм: только латинские буквы, цифры и символ _")
-        return v
+        return _validate_nickname_value(v)
+
+
+# ----------------------------- Admin -----------------------------
+
+
+class AdminUserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nickname: str
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+
+
+class RoleUpdateRequest(BaseModel):
+    role: UserRole
+
+
+class RoleUpgradeCreate(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class RoleUpgradeReview(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
+class RoleUpgradeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    requested_role: UserRole
+    status: Literal["pending", "approved", "rejected"]
+    reason: str | None = None
+    reviewed_by: UUID | None = None
+    review_note: str | None = None
+    created_at: datetime
+    reviewed_at: datetime | None = None
+
+
+class AuditLogOut(BaseModel):
+    id: UUID
+    actor_id: UUID | None = None
+    action: str
+    entity_type: str
+    entity_id: str | None = None
+    data: dict = Field(default_factory=dict)
+    created_at: datetime
 
 
 # ----------------------------- Chats -----------------------------

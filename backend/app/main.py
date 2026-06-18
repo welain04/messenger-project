@@ -9,7 +9,7 @@ from . import db
 from .config import get_settings
 from .errors import validation_exception_handler
 from .middleware import JWTUserMiddleware
-from .routers import auth, chats, messages, notifications, users
+from .routers import admin, auth, chats, messages, notifications, users
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -39,6 +39,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(chats.router)
     api_v1.include_router(messages.router)
     api_v1.include_router(notifications.router)
+    api_v1.include_router(admin.router)
     app.include_router(api_v1)
 
     @app.get("/health", tags=["meta"])

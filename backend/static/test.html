@@ -150,12 +150,7 @@
     <h2>Auth · POST /auth/register</h2>
     <div class="row"><label>nickname</label><input id="reg-nick" value="alice" /></div>
     <div class="row"><label>password</label><input id="reg-pass" value="secret1" /></div>
-    <div class="row"><label>role</label>
-      <select id="reg-role">
-        <option value="student">student</option>
-        <option value="curator">curator</option>
-      </select>
-    </div>
+    <div class="row"><small>Все новые пользователи создаются с ролью student.</small></div>
     <button onclick="register()">Зарегистрировать</button>
     <div class="status" id="reg-status">—</div>
     <pre class="output" id="reg-out">—</pre>
@@ -368,7 +363,6 @@
       body: {
         nickname: $("reg-nick").value,
         password: $("reg-pass").value,
-        role: $("reg-role").value,
       },
       statusEl: $("reg-status"),
       outEl: $("reg-out"),

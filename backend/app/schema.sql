@@ -16,9 +16,12 @@ CREATE TABLE IF NOT EXISTS users (
     nickname      TEXT NOT NULL COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student','curator','admin')),
+    first_name    TEXT NOT NULL DEFAULT '',
+    last_name     TEXT NOT NULL DEFAULT '',
     display_name  TEXT,
     avatar_url    TEXT,
-    email         TEXT COLLATE NOCASE,
+    email         TEXT NOT NULL COLLATE NOCASE,
+    email_verified INTEGER NOT NULL DEFAULT 0 CHECK (email_verified IN (0,1)),
     bio           TEXT,
     is_active     INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
     created_at    TEXT NOT NULL,
@@ -140,6 +143,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     read_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_notifications_user_unread ON notifications (user_id, is_read, created_at);
+CREATE INDEX IF NOT EXISTS ix_notifications_chat ON notifications (chat_id);
 
 -- ============ ATTACHMENTS ============
 CREATE TABLE IF NOT EXISTS attachments (
@@ -171,6 +175,33 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sessions_token ON user_sessions (refresh_token_hash);
 CREATE INDEX IF NOT EXISTS ix_sessions_user ON user_sessions (user_id) WHERE revoked_at IS NULL;
+
+-- ============ EMAIL VERIFICATION TOKENS ============
+-- Хранится только sha256-хэш токена; сырой токен уходит пользователю в письме.
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash  TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    consumed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_evt_token_hash ON email_verification_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS ix_evt_user ON email_verification_tokens (user_id, consumed_at);
+
+-- ============ PASSWORD RESET TOKENS ============
+-- Хранится только sha256-хэш токена; сырой токен уходит пользователю в письме.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash  TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    consumed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_prt_token_hash ON password_reset_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS ix_prt_user ON password_reset_tokens (user_id, consumed_at);
 
 -- ============ MESSAGE REACTIONS (future) ============
 CREATE TABLE IF NOT EXISTS message_reactions (
@@ -205,6 +236,24 @@ CREATE TABLE IF NOT EXISTS chat_invites (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_invite_token ON chat_invites (token);
 CREATE INDEX IF NOT EXISTS ix_invites_chat ON chat_invites (chat_id);
+
+-- ============ ROLE UPGRADE REQUESTS ============
+-- Заявки на повышение роли (student -> curator), подтверждаются администратором.
+CREATE TABLE IF NOT EXISTS role_upgrade_requests (
+    id            TEXT PRIMARY KEY,
+    user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    requested_role TEXT NOT NULL CHECK (requested_role IN ('curator')),
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    reason        TEXT,
+    reviewed_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+    review_note   TEXT,
+    created_at    TEXT NOT NULL,
+    reviewed_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_rur_status ON role_upgrade_requests (status, created_at);
+-- Не более одной активной (pending) заявки на пользователя.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rur_pending
+    ON role_upgrade_requests (user_id) WHERE status = 'pending';
 
 -- ============ CHAT ROLES (future) ============
 CREATE TABLE IF NOT EXISTS chat_roles (

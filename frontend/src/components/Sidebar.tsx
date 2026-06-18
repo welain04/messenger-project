@@ -3,7 +3,7 @@ import { useChats } from "../chats/ChatsContext";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorBox, LoadingHint } from "./States";
 import type { Chat } from "../api";
-import { useUser } from "../users/userCache";
+import { useUser, fullNameOf } from "../users/userCache";
 
 const chatBadgeClasses = (type: Chat["type"]) =>
   type === "personal" ? "bg-primary-500" : "bg-sky-500";
@@ -30,8 +30,8 @@ const ChatListItem = ({ chat }: { chat: Chat }) => {
   const title =
     chat.type === "group"
       ? chat.title || "Без названия"
-      : otherEntry?.user?.nickname
-        ? otherEntry.user.nickname
+      : otherEntry?.user
+        ? fullNameOf(otherEntry.user)
         : otherId
           ? otherId.slice(0, 8) + "…"
           : "Личный чат";

@@ -24,8 +24,16 @@ from app.security import hash_password  # noqa: E402
 PASSWORD = "password123"
 
 
-def _user(nickname: str, role: UserRole) -> UserInDB:
-    user = UserInDB(nickname=nickname, role=role, hashed_password=hash_password(PASSWORD))
+def _user(nickname: str, role: UserRole, first_name: str, last_name: str) -> UserInDB:
+    user = UserInDB(
+        nickname=nickname,
+        role=role,
+        hashed_password=hash_password(PASSWORD),
+        email=f"{nickname}@example.com",
+        first_name=first_name,
+        last_name=last_name,
+        email_verified=True,  # seed-пользователи сразу подтверждены
+    )
     storage.create_user(user)
     return user
 
@@ -37,10 +45,11 @@ def main() -> None:
     now = datetime.now(timezone.utc)
 
     # --- пользователи ---
-    alice = _user("alice", UserRole.curator)
-    bob = _user("bob", UserRole.student)
-    carol = _user("carol", UserRole.student)
-    dave = _user("dave", UserRole.student)
+    _user("admin", UserRole.admin, "Admin", "Root")
+    alice = _user("alice", UserRole.curator, "Alice", "Anderson")
+    bob = _user("bob", UserRole.student, "Bob", "Brown")
+    carol = _user("carol", UserRole.student, "Carol", "Clark")
+    dave = _user("dave", UserRole.student, "Dave", "Davis")
 
     # --- личный чат alice <-> bob ---
     dm = Chat(type="personal", participant_ids=[alice.id, bob.id], created_by=alice.id)
@@ -87,7 +96,7 @@ def main() -> None:
     )
 
     print("SEED OK:")
-    print(f"  users: alice (curator), bob, carol, dave (student)  | password: {PASSWORD}")
+    print(f"  users: admin (admin), alice (curator), bob, carol, dave (student)  | password: {PASSWORD}")
     print(f"  chats: personal alice<->bob, group 'Math 101' (alice, bob, carol)")
     print(f"  db:    {db._db_path()}")
 

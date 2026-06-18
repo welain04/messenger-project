@@ -1,7 +1,7 @@
 // Высокоуровневые обёртки эндпоинтов. Импортируйте отсюда:
 //   import { authApi, chatsApi, messagesApi } from "./api/api";
 
-import { request, setToken } from "./client";
+import { getRefreshToken, request, setTokens } from "./client";
 import type {
   AddParticipantRequest,
   Chat,
@@ -11,7 +11,12 @@ import type {
   LoginRequest,
   Message,
   Notification,
+  ChangePasswordRequest,
+  ForgotPasswordRequest,
+  ResetPasswordRequest,
   RegisterRequest,
+  RoleUpgradeRequest,
+  Session,
   TokenResponse,
   UpdateMessageRequest,
   UpdateUserRequest,
@@ -30,12 +35,59 @@ export const authApi = {
       body: payload,
       auth: false,
     });
-    setToken(res.access_token);
+    setTokens(res);
     return res;
   },
 
-  logout(): void {
-    setToken(null);
+  verifyEmail(token: string): Promise<User> {
+    return request<User>("/auth/verify-email", {
+      method: "POST",
+      body: { token },
+      auth: false,
+    });
+  },
+
+  resendVerification(): Promise<{ detail: string }> {
+    return request<{ detail: string }>("/auth/resend-verification", { method: "POST" });
+  },
+
+  forgotPassword(payload: ForgotPasswordRequest): Promise<{ detail: string }> {
+    return request<{ detail: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: payload,
+      auth: false,
+    });
+  },
+
+  resetPassword(payload: ResetPasswordRequest): Promise<void> {
+    return request<void>("/auth/reset-password", {
+      method: "POST",
+      body: payload,
+      auth: false,
+    });
+  },
+
+  async logout(): Promise<void> {
+    const refresh_token = getRefreshToken();
+    try {
+      await request<void>("/auth/logout", {
+        method: "POST",
+        body: { refresh_token },
+        auth: false,
+      });
+    } catch {
+      // отзыв на сервере не критичен для клиентского выхода
+    } finally {
+      setTokens(null);
+    }
+  },
+
+  async logoutAll(): Promise<void> {
+    try {
+      await request<void>("/auth/logout-all", { method: "POST" });
+    } finally {
+      setTokens(null);
+    }
   },
 };
 
@@ -46,6 +98,9 @@ export const usersApi = {
   updateMe(payload: UpdateUserRequest): Promise<User> {
     return request<User>("/users/me", { method: "PATCH", body: payload });
   },
+  changePassword(payload: ChangePasswordRequest): Promise<void> {
+    return request<void>("/users/me/password", { method: "PATCH", body: payload });
+  },
   getById(userId: UUID): Promise<User> {
     return request<User>(`/users/${userId}`);
   },
@@ -53,6 +108,21 @@ export const usersApi = {
     return request<User[]>("/users/search", {
       query: { q: query, limit },
     });
+  },
+  listSessions(): Promise<Session[]> {
+    return request<Session[]>("/users/me/sessions");
+  },
+  revokeSession(sessionId: UUID): Promise<void> {
+    return request<void>(`/users/me/sessions/${sessionId}`, { method: "DELETE" });
+  },
+  requestRoleUpgrade(reason?: string): Promise<RoleUpgradeRequest> {
+    return request<RoleUpgradeRequest>("/users/me/role-upgrade-request", {
+      method: "POST",
+      body: { reason: reason || null },
+    });
+  },
+  myRoleUpgradeRequests(): Promise<RoleUpgradeRequest[]> {
+    return request<RoleUpgradeRequest[]>("/users/me/role-upgrade-requests");
   },
 };
 
