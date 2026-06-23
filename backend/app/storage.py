@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from . import db, dialect
-from .models import Chat, Message, Notification, UserInDB, UserRole
+from .models import Chat, Message, Notification, UserInDB, UserRole, Attachment, StagedUpload
 
 # Порядок удаления: сначала зависимые таблицы, затем родительские.
 _ALL_TABLES = [
@@ -27,6 +27,7 @@ _ALL_TABLES = [
     "password_reset_tokens",
     "user_sessions",
     "attachments",
+    "staged_uploads",
     "notifications",
     "message_reads",
     "chat_participants",
@@ -83,6 +84,7 @@ def _row_to_user(r: sqlite3.Row) -> UserInDB:
         first_name=(r["first_name"] or "") if "first_name" in keys else "",
         last_name=(r["last_name"] or "") if "last_name" in keys else "",
         email_verified=bool(r["email_verified"]) if "email_verified" in keys else False,
+        avatar_url=r["avatar_url"] if "avatar_url" in keys and r["avatar_url"] else None,
         id=UUID(r["id"]),
         created_at=_parse(r["created_at"]),
         is_active=bool(r["is_active"]),
@@ -100,15 +102,47 @@ def _row_to_chat(r: sqlite3.Row, participant_ids: list[UUID]) -> Chat:
     )
 
 
-def _row_to_message(r: sqlite3.Row, is_read: bool = False) -> Message:
+def _row_to_message(r: sqlite3.Row, is_read: bool = False, attachments: list | None = None) -> Message:
     return Message(
         chat_id=UUID(r["chat_id"]),
         author_id=UUID(r["author_id"]) if r["author_id"] else None,
-        text=r["body"],
+        text=r["body"] or "",
         id=UUID(r["id"]),
         sent_at=_parse(r["created_at"]),
         is_read=is_read,
         edited_at=_parse(r["edited_at"]),
+        attachments=attachments or [],
+    )
+
+
+def _row_to_attachment(r: sqlite3.Row) -> Attachment:
+    return Attachment(
+        message_id=UUID(r["message_id"]),
+        kind=r["kind"],
+        storage_key=r["storage_key"],
+        file_name=r["file_name"],
+        mime_type=r["mime_type"],
+        size_bytes=r["size_bytes"],
+        checksum=r["checksum"],
+        id=UUID(r["id"]),
+        created_at=_parse(r["created_at"]),
+    )
+
+
+def _row_to_staged_upload(r: sqlite3.Row) -> StagedUpload:
+    return StagedUpload(
+        uploader_id=UUID(r["uploader_id"]),
+        storage_key=r["storage_key"],
+        kind=r["kind"],
+        file_name=r["file_name"],
+        mime_type=r["mime_type"],
+        size_bytes=int(r["size_bytes"]),
+        checksum=r["checksum"],
+        expires_at=_parse(r["expires_at"]),
+        id=UUID(r["id"]),
+        created_at=_parse(r["created_at"]),
+        consumed_at=_parse(r["consumed_at"]),
+        message_id=UUID(r["message_id"]) if r["message_id"] else None,
     )
 
 
@@ -732,11 +766,12 @@ def _is_read(author_id: str | None, created_at: str, watermarks: dict[str, str |
     return False
 
 
-def create_message(msg: Message) -> None:
+def create_message(msg: Message, *, body: str | None = None) -> None:
+    text = body if body is not None else (msg.text or None)
     db.execute(
         "INSERT INTO messages (id, chat_id, author_id, type, body, created_at) "
         "VALUES (?,?,?,?,?,?)",
-        (str(msg.id), str(msg.chat_id), str(msg.author_id), "text", msg.text, _fmt(msg.sent_at)),
+        (str(msg.id), str(msg.chat_id), str(msg.author_id), "text", text, _fmt(msg.sent_at)),
     )
 
 
@@ -747,8 +782,14 @@ def list_messages(chat_id: UUID, limit: int, offset: int) -> list[Message]:
         (str(chat_id), limit, offset),
     )
     watermarks = _watermarks(chat_id)
+    msg_ids = [r["id"] for r in rows]
+    att_map = list_attachments_for_messages([UUID(mid) for mid in msg_ids])
     return [
-        _row_to_message(r, _is_read(r["author_id"], r["created_at"], watermarks))
+        _row_to_message(
+            r,
+            _is_read(r["author_id"], r["created_at"], watermarks),
+            att_map.get(UUID(r["id"]), []),
+        )
         for r in rows
     ]
 
@@ -856,4 +897,125 @@ def mark_notification_read(notification_id: UUID) -> None:
     db.execute(
         "UPDATE notifications SET is_read=1, read_at=? WHERE id=?",
         (_now_str(), str(notification_id)),
+    )
+
+
+# --------------------------- avatars ---------------------------
+
+
+def get_avatar_key(user_id: UUID) -> str | None:
+    r = db.query_one("SELECT avatar_url FROM users WHERE id=?", (str(user_id),))
+    return r["avatar_url"] if r and r["avatar_url"] else None
+
+
+def set_avatar_key(user_id: UUID, key: str | None) -> None:
+    db.execute(
+        "UPDATE users SET avatar_url=?, updated_at=? WHERE id=?",
+        (key, _now_str(), str(user_id)),
+    )
+
+
+def get_avatar_visibility(user_id: UUID) -> str:
+    r = db.query_one(
+        "SELECT avatar_visibility FROM user_privacy_settings WHERE user_id=?",
+        (str(user_id),),
+    )
+    return r["avatar_visibility"] if r else "public"
+
+
+def can_view_avatar(target_user_id: UUID, viewer_id: UUID) -> bool:
+    if target_user_id == viewer_id:
+        return True
+    visibility = get_avatar_visibility(target_user_id)
+    if visibility == "private":
+        return False
+    if visibility == "public":
+        return True
+    # participants: общий активный чат
+    r = db.query_one(
+        "SELECT 1 FROM chat_participants p1 "
+        "JOIN chat_participants p2 ON p1.chat_id = p2.chat_id AND p2.user_id = ? "
+        "WHERE p1.user_id = ? AND p1.left_at IS NULL AND p2.left_at IS NULL LIMIT 1",
+        (str(viewer_id), str(target_user_id)),
+    )
+    return r is not None
+
+
+# --------------------------- attachments ---------------------------
+
+
+def create_attachment(att: Attachment) -> None:
+    db.execute(
+        "INSERT INTO attachments "
+        "(id, message_id, kind, storage_key, file_name, mime_type, size_bytes, checksum, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (
+            str(att.id),
+            str(att.message_id),
+            att.kind,
+            att.storage_key,
+            att.file_name,
+            att.mime_type,
+            att.size_bytes,
+            att.checksum,
+            _fmt(att.created_at or _now()),
+        ),
+    )
+
+
+def get_attachment(attachment_id: UUID) -> Attachment | None:
+    r = db.query_one("SELECT * FROM attachments WHERE id=?", (str(attachment_id),))
+    return _row_to_attachment(r) if r else None
+
+
+def list_attachments_for_messages(message_ids: list[UUID]) -> dict[UUID, list[Attachment]]:
+    if not message_ids:
+        return {}
+    placeholders = ",".join("?" * len(message_ids))
+    rows = db.query_all(
+        f"SELECT * FROM attachments WHERE message_id IN ({placeholders}) ORDER BY created_at",
+        tuple(str(mid) for mid in message_ids),
+    )
+    result: dict[UUID, list[Attachment]] = {}
+    for r in rows:
+        mid = UUID(r["message_id"])
+        result.setdefault(mid, []).append(_row_to_attachment(r))
+    return result
+
+
+# --------------------------- staged uploads ---------------------------
+
+
+def create_staged_upload(staged: StagedUpload) -> None:
+    db.execute(
+        "INSERT INTO staged_uploads "
+        "(id, uploader_id, storage_key, kind, file_name, mime_type, size_bytes, checksum, "
+        "created_at, expires_at, consumed_at, message_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            str(staged.id),
+            str(staged.uploader_id),
+            staged.storage_key,
+            staged.kind,
+            staged.file_name,
+            staged.mime_type,
+            staged.size_bytes,
+            staged.checksum,
+            _fmt(staged.created_at or _now()),
+            _fmt(staged.expires_at),
+            _fmt(staged.consumed_at) if staged.consumed_at else None,
+            str(staged.message_id) if staged.message_id else None,
+        ),
+    )
+
+
+def get_staged_upload(upload_id: UUID) -> StagedUpload | None:
+    r = db.query_one("SELECT * FROM staged_uploads WHERE id=?", (str(upload_id),))
+    return _row_to_staged_upload(r) if r else None
+
+
+def mark_staged_upload_consumed(upload_id: UUID, message_id: UUID | None = None) -> None:
+    db.execute(
+        "UPDATE staged_uploads SET consumed_at=?, message_id=? WHERE id=?",
+        (_now_str(), str(message_id) if message_id else None, str(upload_id)),
     )

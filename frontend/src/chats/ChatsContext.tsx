@@ -1,10 +1,19 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { chatsApi, formatApiError } from "../api";
 import type { Chat } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
 interface ChatsContextValue {
   chats: Chat[];
+  totalUnreadCount: number;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -52,7 +61,20 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     setChats((prev) => prev.filter((c) => c.id !== chatId));
   }, []);
 
-  const value: ChatsContextValue = { chats, loading, error, refresh, upsertChat, removeChatLocally };
+  const totalUnreadCount = useMemo(
+    () => chats.reduce((sum, chat) => sum + chat.unread_count, 0),
+    [chats],
+  );
+
+  const value: ChatsContextValue = {
+    chats,
+    totalUnreadCount,
+    loading,
+    error,
+    refresh,
+    upsertChat,
+    removeChatLocally,
+  };
   return <ChatsContext.Provider value={value}>{children}</ChatsContext.Provider>;
 }
 

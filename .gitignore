@@ -27,3 +27,7 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Local file storage (STORAGE_PROVIDER=local)
+backend/uploads/
+backend/.test_uploads/

@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 
 from .. import audit, storage
 from ..config import get_settings
 from ..deps import get_current_user, require_verified_email
+from ..deps_storage import get_file_service
 from ..models import UserInDB, UserRole
 from ..rate_limit import RateLimiter
 from ..schemas import (
@@ -17,6 +18,7 @@ from ..schemas import (
     UserUpdateRequest,
 )
 from ..security import hash_password, verify_password
+from ..services.files import FileService
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -27,6 +29,25 @@ _search_rate_limit = RateLimiter(_settings.RATE_LIMIT_SEARCH_PER_MIN, 60, "user_
 @router.get("/me", response_model=MePrivate)
 def read_me(current: UserInDB = Depends(get_current_user)) -> MePrivate:
     return MePrivate.model_validate(current)
+
+
+@router.post("/me/avatar", response_model=MePrivate)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current: UserInDB = Depends(require_verified_email),
+    files: FileService = Depends(get_file_service),
+) -> MePrivate:
+    updated = files.upload_avatar(current, file)
+    return MePrivate.model_validate(updated)
+
+
+@router.delete("/me/avatar", response_model=MePrivate)
+def delete_avatar(
+    current: UserInDB = Depends(get_current_user),
+    files: FileService = Depends(get_file_service),
+) -> MePrivate:
+    updated = files.delete_avatar(current)
+    return MePrivate.model_validate(updated)
 
 
 @router.patch("/me", response_model=MePrivate)

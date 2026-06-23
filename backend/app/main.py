@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -9,19 +10,33 @@ from . import db
 from .config import get_settings
 from .errors import validation_exception_handler
 from .middleware import JWTUserMiddleware
-from .routers import admin, auth, chats, messages, notifications, users
+from .routers import admin, auth, chats, files, messages, notifications, uploads, users
+from .services.storage.factory import create_storage_service
+
+logger = logging.getLogger("messenger")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
     db.init_db()
     app = FastAPI(
         title="Online School Messenger API",
         version="1.0.0",
-        description="In-memory messenger backend for an online school.",
+        description="Messenger backend for an online school.",
     )
+
+    try:
+        app.state.storage_service = create_storage_service(settings)
+        logger.info("StorageService initialized provider=%s", settings.STORAGE_PROVIDER)
+    except ValueError as exc:
+        logger.warning("StorageService not initialized: %s", exc)
+        app.state.storage_service = None
 
     app.add_middleware(
         CORSMiddleware,
@@ -38,6 +53,8 @@ def create_app() -> FastAPI:
     api_v1.include_router(users.router)
     api_v1.include_router(chats.router)
     api_v1.include_router(messages.router)
+    api_v1.include_router(uploads.router)
+    api_v1.include_router(files.router)
     api_v1.include_router(notifications.router)
     api_v1.include_router(admin.router)
     app.include_router(api_v1)

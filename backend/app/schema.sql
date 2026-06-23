@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS messages (
     edited_at                 TEXT,
     deleted_at                TEXT,
     CHECK (
-        type <> 'text' OR (body IS NOT NULL AND length(body) BETWEEN 1 AND 2000)
+        type <> 'text' OR body IS NULL OR length(body) BETWEEN 0 AND 2000
     )
 );
 CREATE INDEX IF NOT EXISTS ix_messages_chat_created   ON messages (chat_id, created_at);
@@ -160,6 +160,25 @@ CREATE TABLE IF NOT EXISTS attachments (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_attachments_message ON attachments (message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_attachments_storage_key ON attachments (storage_key);
+
+-- ============ STAGED UPLOADS ============
+CREATE TABLE IF NOT EXISTS staged_uploads (
+    id          TEXT PRIMARY KEY,
+    uploader_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    storage_key TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('image','video','audio','file')),
+    file_name   TEXT,
+    mime_type   TEXT,
+    size_bytes  INTEGER NOT NULL,
+    checksum    TEXT,
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    consumed_at TEXT,
+    message_id  TEXT REFERENCES messages(id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_staged_uploads_storage_key ON staged_uploads (storage_key);
+CREATE INDEX IF NOT EXISTS ix_staged_uploads_uploader ON staged_uploads (uploader_id, consumed_at);
 
 -- ============ USER SESSIONS ============
 CREATE TABLE IF NOT EXISTS user_sessions (

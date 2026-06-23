@@ -14,6 +14,7 @@ export interface User {
   first_name: string;
   last_name: string;
   created_at: ISODateTime;
+  has_avatar?: boolean;
   // Приватные поля (приходят только в /users/me и ответах auth).
   email?: string;
   email_verified?: boolean;
@@ -45,6 +46,35 @@ export interface Message {
   sent_at: ISODateTime;
   is_read: boolean;
   edited_at: ISODateTime | null;
+  attachments?: Attachment[];
+}
+
+export type AttachmentKind = "image" | "video" | "audio" | "file";
+
+export interface Attachment {
+  id: UUID;
+  message_id: UUID;
+  kind: AttachmentKind;
+  file_name: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_at: ISODateTime;
+}
+
+export interface StagedUpload {
+  id: UUID;
+  kind: AttachmentKind;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  created_at: ISODateTime;
+  expires_at: ISODateTime;
+}
+
+export interface SignedUrl {
+  url: string;
+  expires_at: ISODateTime;
+  storage_key: string;
 }
 
 export interface Notification {
@@ -133,7 +163,8 @@ export interface AddParticipantRequest {
 }
 
 export interface CreateMessageRequest {
-  text: string;
+  text?: string | null;
+  upload_ids?: UUID[];
 }
 
 export interface UpdateMessageRequest {

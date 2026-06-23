@@ -4,6 +4,8 @@ import { useAuth } from "../auth/AuthContext";
 import { formatApiError, usersApi } from "../api";
 import type { RoleUpgradeRequest, Session, UserRole } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
+import { UserAvatar } from "../components/UserAvatar";
+import { invalidateUser } from "../users/userCache";
 
 const requestStatusLabel: Record<RoleUpgradeRequest["status"], string> = {
   pending: "на рассмотрении",
@@ -15,7 +17,7 @@ const roleLabel = (role: UserRole): string =>
   role === "student" ? "Ученик" : role === "curator" ? "Куратор" : "Администратор";
 
 export const ProfilePage = () => {
-  const { user, initializing, updateMe, logout, logoutAll } = useAuth();
+  const { user, initializing, updateMe, logout, logoutAll, refresh } = useAuth();
   const navigate = useNavigate();
 
   const [nickname, setNickname] = useState(user?.nickname ?? "");
@@ -35,6 +37,9 @@ export const ProfilePage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const [avatarSubmitting, setAvatarSubmitting] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const loadSessions = async () => {
     try {
@@ -130,6 +135,38 @@ export const ProfilePage = () => {
     }
   };
 
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+    setAvatarSubmitting(true);
+    setAvatarError(null);
+    try {
+      await usersApi.uploadAvatar(file);
+      invalidateUser(user.id);
+      await refresh();
+    } catch (e) {
+      setAvatarError(formatApiError(e));
+    } finally {
+      setAvatarSubmitting(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    if (!user) return;
+    setAvatarSubmitting(true);
+    setAvatarError(null);
+    try {
+      await usersApi.deleteAvatar();
+      invalidateUser(user.id);
+      await refresh();
+    } catch (e) {
+      setAvatarError(formatApiError(e));
+    } finally {
+      setAvatarSubmitting(false);
+    }
+  };
+
   if (initializing) {
     return (
       <section className="card-surface flex w-full items-center justify-center rounded-2xl p-10">
@@ -150,9 +187,7 @@ export const ProfilePage = () => {
     <section className="card-surface flex w-full flex-col gap-5 rounded-2xl p-4 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500 text-lg font-semibold text-white shadow-card">
-            {user.nickname[0]?.toUpperCase()}
-          </div>
+          <UserAvatar user={user} size="md" />
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-slate-900">
               {user.first_name || user.last_name
@@ -171,6 +206,40 @@ export const ProfilePage = () => {
         >
           Выйти
         </button>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Аватар
+        </h3>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+            {avatarSubmitting ? "Загрузка…" : "Загрузить фото"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              disabled={avatarSubmitting}
+              onChange={handleAvatarChange}
+            />
+          </label>
+          {user.has_avatar && (
+            <button
+              type="button"
+              onClick={handleAvatarDelete}
+              disabled={avatarSubmitting}
+              className="rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+            >
+              Удалить
+            </button>
+          )}
+        </div>
+        {avatarError && (
+          <div className="mt-2">
+            <ErrorBox message={avatarError} />
+          </div>
+        )}
+        <p className="mt-2 text-[11px] text-slate-500">JPEG, PNG или WebP, до 5 МБ.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -130,6 +130,7 @@ class UserPublic(BaseModel):
     first_name: str
     last_name: str
     created_at: datetime
+    has_avatar: bool = False
 
 
 class MePrivate(UserPublic):
@@ -251,11 +252,52 @@ class AddParticipantRequest(BaseModel):
     user_id: UUID
 
 
+# ----------------------------- Files / Attachments -----------------------------
+
+
+class SignedUrlOut(BaseModel):
+    url: str
+    expires_at: datetime
+    storage_key: str
+
+
+class StagedUploadOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: Literal["image", "video", "audio", "file"]
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime
+    expires_at: datetime
+
+
+class AttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    message_id: UUID
+    kind: Literal["image", "video", "audio", "file"]
+    file_name: str | None
+    mime_type: str | None
+    size_bytes: int | None
+    created_at: datetime
+
+
 # ----------------------------- Messages -----------------------------
 
 
 class MessageCreateRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=2000)
+    text: str | None = Field(default=None, max_length=2000)
+    upload_ids: list[UUID] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_content(self) -> "MessageCreateRequest":
+        text_ok = self.text is not None and self.text.strip()
+        if not text_ok and not self.upload_ids:
+            raise ValueError("Укажите текст или прикрепите файл")
+        return self
 
 
 class MessageUpdateRequest(BaseModel):
@@ -272,6 +314,7 @@ class MessageOut(BaseModel):
     sent_at: datetime
     is_read: bool
     edited_at: datetime | None = None
+    attachments: list[AttachmentOut] = Field(default_factory=list)
 
 
 # ----------------------------- Notifications -----------------------------

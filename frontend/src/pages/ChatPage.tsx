@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ArrowUpIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 import { Sidebar } from "../components/Sidebar";
+import { UserAvatar } from "../components/UserAvatar";
 import { useAuth } from "../auth/AuthContext";
 import { useChats } from "../chats/ChatsContext";
-import { chatsApi, messagesApi, formatApiError } from "../api";
-import type { Chat, Message } from "../api";
+import { chatsApi, filesApi, messagesApi, uploadsApi, formatApiError } from "../api";
+import type { Attachment, Chat, Message, StagedUpload } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
+import { useSignedUrl } from "../hooks/useSignedUrl";
 import { useUser, fullNameOf } from "../users/userCache";
+
+const DRAFT_MAX_ROWS = 4;
+const DRAFT_MIN_HEIGHT_PX = 40;
 
 const formatTime = (iso: string) => {
   try {
@@ -14,6 +20,42 @@ const formatTime = (iso: string) => {
   } catch {
     return "";
   }
+};
+
+const AttachmentImage = ({ attachment }: { attachment: Attachment }) => {
+  const { url } = useSignedUrl(
+    () => filesApi.attachmentUrl(attachment.id),
+    attachment.kind === "image",
+  );
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt={attachment.file_name ?? "Изображение"}
+      className="max-h-48 rounded-lg object-cover"
+    />
+  );
+};
+
+const AttachmentFile = ({ attachment }: { attachment: Attachment }) => {
+  const { url } = useSignedUrl(() => filesApi.attachmentUrl(attachment.id), true);
+  if (!url) {
+    return (
+      <span className="text-[11px] opacity-80">
+        📎 {attachment.file_name ?? "Файл"}
+      </span>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[11px] underline opacity-90 hover:opacity-100"
+    >
+      📎 {attachment.file_name ?? "Скачать файл"}
+    </a>
+  );
 };
 
 const MessageBubble = ({ message, isOwn }: { message: Message; isOwn: boolean }) => (
@@ -25,7 +67,18 @@ const MessageBubble = ({ message, isOwn }: { message: Message; isOwn: boolean })
           : "rounded-bl-sm bg-slate-100 text-slate-900 border border-slate-200"
       }`}
     >
-      <p className="whitespace-pre-wrap break-words">{message.text}</p>
+      {message.attachments && message.attachments.length > 0 && (
+        <div className="mb-2 space-y-2">
+          {message.attachments.map((a) =>
+            a.kind === "image" ? (
+              <AttachmentImage key={a.id} attachment={a} />
+            ) : (
+              <AttachmentFile key={a.id} attachment={a} />
+            ),
+          )}
+        </div>
+      )}
+      {message.text && <p className="whitespace-pre-wrap break-words">{message.text}</p>}
       <div className={`mt-1 flex justify-end gap-2 text-[10px] ${isOwn ? "text-white/80" : "text-slate-400"}`}>
         {message.edited_at && <span>изм.</span>}
         <span>{formatTime(message.sent_at)}</span>
@@ -51,12 +104,15 @@ const MemberRow = ({ id, isCurrent }: { id: string; isCurrent: boolean }) => {
         to={`/users/${id}`}
         className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 transition hover:bg-slate-100"
       >
-        <div className="min-w-0">
-          <p className="truncate text-xs font-medium text-slate-900">
-            {u ? fullNameOf(u) : id.slice(0, 8) + "…"}
-            {isCurrent && <span className="text-slate-400"> (вы)</span>}
-          </p>
-          {u && <p className="truncate text-[11px] text-slate-400">@{u.nickname}</p>}
+        <div className="flex min-w-0 items-center gap-2">
+          <UserAvatar user={u} userId={id} size="sm" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-slate-900">
+              {u ? fullNameOf(u) : id.slice(0, 8) + "…"}
+              {isCurrent && <span className="text-slate-400"> (вы)</span>}
+            </p>
+            {u && <p className="truncate text-[11px] text-slate-400">@{u.nickname}</p>}
+          </div>
         </div>
         {u && (
           <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
@@ -81,10 +137,28 @@ export const ChatPage = () => {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<StagedUpload[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const [showMembers, setShowMembers] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const syncTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const styles = getComputedStyle(el);
+    const lineHeight = parseFloat(styles.lineHeight) || 18;
+    const padding =
+      parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+    const maxHeight = lineHeight * DRAFT_MAX_ROWS + padding;
+    const next = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${Math.max(DRAFT_MIN_HEIGHT_PX, next)}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, []);
 
   const loadAll = useCallback(async () => {
     if (!chatId) return;
@@ -94,7 +168,6 @@ export const ChatPage = () => {
       const [c, m] = await Promise.all([chatsApi.getChat(chatId), messagesApi.list(chatId)]);
       setChat(c);
       setMessages(m);
-      // refresh sidebar (unread_count может измениться после прочтения)
       refreshChats();
     } catch (e) {
       setError(formatApiError(e));
@@ -111,17 +184,50 @@ export const ChatPage = () => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages.length]);
 
+  useEffect(() => {
+    syncTextareaHeight();
+  }, [draft, syncTextareaHeight]);
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setSendError(null);
+    try {
+      const staged = await uploadsApi.stage(file);
+      setPendingUploads((prev) => [...prev, staged]);
+    } catch (e) {
+      setSendError(formatApiError(e));
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const removePending = async (id: string) => {
+    setPendingUploads((prev) => prev.filter((u) => u.id !== id));
+    try {
+      await uploadsApi.cancel(id);
+    } catch {
+      // отмена на сервере не критична для UX
+    }
+  };
+
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!chatId) return;
     const text = draft.trim();
-    if (!text) return;
+    if (!text && pendingUploads.length === 0) return;
     setSending(true);
     setSendError(null);
     try {
-      const created = await messagesApi.send(chatId, { text });
+      const created = await messagesApi.send(chatId, {
+        text: text || null,
+        upload_ids: pendingUploads.map((u) => u.id),
+      });
       setMessages((prev) => [...prev, created]);
       setDraft("");
+      setPendingUploads([]);
       refreshChats();
     } catch (e) {
       setSendError(formatApiError(e));
@@ -146,18 +252,18 @@ export const ChatPage = () => {
   if (!chatId) return null;
 
   return (
-    <div className="flex w-full flex-row gap-2 sm:gap-4">
+    <div className="flex h-[calc(100dvh-7.5rem)] w-full min-h-0 flex-row items-stretch gap-2 sm:h-[calc(100dvh-9.5rem)]">
       <Sidebar />
-      <section className="card-surface flex flex-1 flex-col rounded-2xl">
+      <section className="card-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl">
         <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
           <div className="flex items-center gap-3">
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-2xl text-xs font-semibold text-white shadow-card ${
-                chat?.type === "personal" ? "bg-emerald-500/90" : "bg-sky-500/90"
-              }`}
-            >
-              {chat?.type === "personal" ? "DM" : "GRP"}
-            </div>
+            {chat?.type === "personal" && otherId ? (
+              <UserAvatar user={otherEntry?.user} userId={otherId} size="sm" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-500/90 text-xs font-semibold text-white shadow-card">
+                GRP
+              </div>
+            )}
             {chat?.type === "personal" && otherId ? (
               <Link
                 to={`/users/${otherId}`}
@@ -208,7 +314,10 @@ export const ChatPage = () => {
           </div>
         )}
 
-        <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto bg-slate-50 px-3 py-3 text-xs sm:px-5">
+        <div
+          ref={listRef}
+          className="minimal-scroll min-h-0 flex-1 space-y-2 overflow-y-auto bg-slate-50 px-3 py-3 text-xs sm:px-5"
+        >
           {error && <ErrorBox message={error} onRetry={loadAll} />}
           {!loading && !error && messages.length === 0 && (
             <div className="py-8 text-center text-[11px] text-slate-500">
@@ -220,30 +329,94 @@ export const ChatPage = () => {
           ))}
         </div>
 
-        <form onSubmit={handleSend} className="border-t border-slate-200 bg-white p-3">
-          {sendError && <div className="mb-2"><ErrorBox message={sendError} /></div>}
-          <div className="flex items-end gap-2">
+        <form onSubmit={handleSend} className="shrink-0 border-t border-slate-200 bg-white p-3">
+          {sendError && (
+            <div className="mb-2">
+              <ErrorBox message={sendError} />
+            </div>
+          )}
+          {pendingUploads.length > 0 && (
+            <ul className="mb-2 flex flex-wrap gap-2">
+              {pendingUploads.map((u) => (
+                <li
+                  key={u.id}
+                  className="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] text-slate-700"
+                >
+                  <span className="max-w-[120px] truncate">{u.file_name}</span>
+                  <button
+                    type="button"
+                    onClick={() => void removePending(u.id)}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-end gap-1.5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <button
+              type="button"
+              disabled={uploading || sending}
+              onClick={() => fileInputRef.current?.click()}
+              className="mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-transparent text-slate-400 transition hover:bg-slate-100/70 hover:text-slate-600 disabled:opacity-40"
+              title="Прикрепить файл"
+            >
+              {uploading ? (
+                <span className="text-xs">…</span>
+              ) : (
+                <PaperClipIcon className="h-5 w-5" strokeWidth={1.75} />
+              )}
+            </button>
             <textarea
+              ref={textareaRef}
               rows={1}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key !== "Enter") return;
+
+                if (e.ctrlKey || e.metaKey) {
+                  e.preventDefault();
+                  const el = e.currentTarget;
+                  const start = el.selectionStart ?? draft.length;
+                  const end = el.selectionEnd ?? draft.length;
+                  const next = `${draft.slice(0, start)}\n${draft.slice(end)}`;
+                  setDraft(next);
+                  requestAnimationFrame(() => {
+                    el.selectionStart = el.selectionEnd = start + 1;
+                    syncTextareaHeight();
+                  });
+                  return;
+                }
+
+                if (!e.shiftKey) {
                   e.preventDefault();
                   handleSend(e as unknown as React.FormEvent);
                 }
               }}
               maxLength={2000}
               disabled={sending}
-              className="min-h-[44px] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1 disabled:bg-slate-100"
-              placeholder="Напишите сообщение… (Enter — отправить, Shift+Enter — перенос)"
+              className="chat-input-scroll min-h-[40px] flex-1 resize-none rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-xs leading-[18px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-primary-400 focus:ring-1 focus:ring-primary-500/15 disabled:bg-slate-50"
+              placeholder="Сообщение…"
             />
             <button
               type="submit"
-              disabled={sending || !draft.trim()}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary-500 text-sm font-semibold text-white shadow-card transition hover:bg-primary-600 disabled:opacity-50"
+              disabled={sending || uploading || (!draft.trim() && pendingUploads.length === 0)}
+              className="mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white shadow-sm transition hover:bg-primary-600 disabled:opacity-40"
+              title="Отправить"
             >
-              {sending ? "…" : "➤"}
+              {sending ? (
+                <span className="text-xs">…</span>
+              ) : (
+                <ArrowUpIcon className="h-4 w-4" strokeWidth={2.5} />
+              )}
             </button>
           </div>
         </form>

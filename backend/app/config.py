@@ -70,6 +70,34 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
+    # Object storage (Yandex Object Storage / local dev).
+    STORAGE_PROVIDER: str = "local"
+    S3_ENDPOINT: str = "https://storage.yandexcloud.net"
+    S3_BUCKET: str = ""
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
+    S3_REGION: str = "ru-central1"
+    SIGNED_URL_TTL_SECONDS: int = 120
+    AVATAR_MAX_BYTES: int = 5 * 1024 * 1024
+    ATTACHMENT_MAX_BYTES: int = 20 * 1024 * 1024
+    ALLOWED_AVATAR_MIMES: str = "image/jpeg,image/png,image/webp"
+    ALLOWED_ATTACHMENT_MIMES: str = (
+        "image/jpeg,image/png,image/webp,image/gif,"
+        "application/pdf,text/plain,application/zip"
+    )
+    STAGING_TTL_HOURS: int = 24
+    LOCAL_STORAGE_PATH: str = "uploads"
+    # Базовый URL для presigned-ссылок local-провайдера (пусто -> http://HOST:PORT).
+    STORAGE_SERVE_BASE_URL: str = ""
+
+    @property
+    def allowed_avatar_mimes_list(self) -> list[str]:
+        return [m.strip() for m in self.ALLOWED_AVATAR_MIMES.split(",") if m.strip()]
+
+    @property
+    def allowed_attachment_mimes_list(self) -> list[str]:
+        return [m.strip() for m in self.ALLOWED_ATTACHMENT_MIMES.split(",") if m.strip()]
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

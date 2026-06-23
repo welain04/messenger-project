@@ -4,11 +4,26 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .. import audit, storage
 from ..deps import get_current_user, require_verified_email
+from ..deps_storage import get_file_service
 from ..models import Chat, Message, Notification, UserInDB
 from ..permissions import Permission, has_permission
-from ..schemas import MessageCreateRequest, MessageOut, MessageUpdateRequest
+from ..schemas import AttachmentOut, MessageCreateRequest, MessageOut, MessageUpdateRequest, SignedUrlOut
+from ..services.files import FileService
 
 router = APIRouter(tags=["messages"])
+
+
+def _message_to_out(msg: Message) -> MessageOut:
+    return MessageOut(
+        id=msg.id,
+        chat_id=msg.chat_id,
+        author_id=msg.author_id,
+        text=msg.text,
+        sent_at=msg.sent_at,
+        is_read=msg.is_read,
+        edited_at=msg.edited_at,
+        attachments=[AttachmentOut.model_validate(a) for a in msg.attachments],
+    )
 
 
 def _get_chat_or_404(chat_id: UUID) -> Chat:
@@ -43,7 +58,7 @@ def list_messages(
     # Открытие чата отмечает его прочитанным (водяной знак участника).
     storage.mark_chat_read(chat_id, current.id)
     items = storage.list_messages(chat_id, limit=limit, offset=offset)
-    return [MessageOut.model_validate(m) for m in items]
+    return [_message_to_out(m) for m in items]
 
 
 @router.post(
@@ -55,12 +70,20 @@ def send_message(
     chat_id: UUID,
     payload: MessageCreateRequest,
     current: UserInDB = Depends(require_verified_email),
+    files: FileService = Depends(get_file_service),
 ) -> MessageOut:
     chat = _get_chat_or_404(chat_id)
     _ensure_participant(chat, current)
 
-    msg = Message(chat_id=chat_id, author_id=current.id, text=payload.text)
-    storage.create_message(msg)
+    if payload.upload_ids:
+        msg, attachments = files.create_message_with_attachments(
+            chat_id, current, payload.text, payload.upload_ids
+        )
+        msg.attachments = attachments
+    else:
+        text = (payload.text or "").strip()
+        msg = Message(chat_id=chat_id, author_id=current.id, text=text)
+        storage.create_message(msg, body=text)
 
     for pid in chat.participant_ids:
         if pid == current.id:
@@ -75,7 +98,9 @@ def send_message(
             chat_id=chat_id,
             message_id=msg.id,
         )
-    return MessageOut.model_validate(msg)
+    if not msg.attachments and payload.upload_ids:
+        msg = storage.get_message(msg.id) or msg
+    return _message_to_out(msg)
 
 
 @router.patch("/messages/{message_id}", response_model=MessageOut)
@@ -88,7 +113,19 @@ def edit_message(
     if msg.author_id != current.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Редактировать сообщение может только автор")
     storage.update_message(message_id, payload.text)
-    return MessageOut.model_validate(_get_message_or_404(message_id))
+    return _message_to_out(_get_message_or_404(message_id))
+
+
+@router.get("/attachments/{attachment_id}/url", response_model=SignedUrlOut | None)
+def get_attachment_url(
+    attachment_id: UUID,
+    current: UserInDB = Depends(get_current_user),
+    files: FileService = Depends(get_file_service),
+) -> SignedUrlOut | None:
+    signed = files.get_attachment_signed_url(attachment_id, current)
+    if signed is None:
+        return None
+    return SignedUrlOut(url=signed.url, expires_at=signed.expires_at, storage_key=signed.storage_key)
 
 
 @router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)

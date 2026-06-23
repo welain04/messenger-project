@@ -8,6 +8,8 @@ import {
 } from "@heroicons/react/24/outline";
 import logoAsterisk from "../assets/logo-asterisk.png";
 import { useAuth } from "../auth/AuthContext";
+import { useChats } from "../chats/ChatsContext";
+import { UnreadBadge } from "./UnreadBadge";
 import { formatApiError } from "../api";
 
 interface LayoutProps {
@@ -56,6 +58,7 @@ export const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { totalUnreadCount } = useChats();
   const isAuth = location.pathname.startsWith("/auth");
 
   if (isAuth) {
@@ -86,14 +89,23 @@ export const Layout = ({ children }: LayoutProps) => {
               <NavLink
                 to="/chats"
                 className={({ isActive }) =>
-                  `inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
+                  `relative inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition ${
                     isActive
                       ? "bg-primary-500 text-white shadow-card"
                       : "hover:bg-white hover:text-slate-900"
                   }`
                 }
               >
-                <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
+                <span className="relative inline-flex">
+                  <ChatBubbleBottomCenterTextIcon className="h-4 w-4" />
+                  {totalUnreadCount > 0 && (
+                    <UnreadBadge
+                      count={totalUnreadCount}
+                      size="sm"
+                      className="absolute -right-2.5 -top-2"
+                    />
+                  )}
+                </span>
                 <span className="hidden text-xs sm:inline">Чаты</span>
               </NavLink>
               <NavLink

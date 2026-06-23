@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { UserAvatar } from "../components/UserAvatar";
 import { useUser, fullNameOf } from "../users/userCache";
 import { ErrorBox, LoadingHint } from "../components/States";
 import type { UserRole } from "../api";
@@ -18,14 +19,6 @@ export const UserProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
   const entry = useUser(userId);
 
-  const initials = (() => {
-    const u = entry?.user;
-    if (!u) return "?";
-    const f = u.first_name?.[0] ?? "";
-    const l = u.last_name?.[0] ?? "";
-    return (f + l).toUpperCase() || u.nickname.slice(0, 2).toUpperCase();
-  })();
-
   return (
     <div className="mx-auto w-full max-w-xl">
       <Link to="/chats" className="mb-3 inline-block text-xs text-primary-600 hover:underline">
@@ -40,9 +33,7 @@ export const UserProfilePage = () => {
         ) : (
           <>
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-500 text-lg font-semibold text-white shadow-card">
-                {initials}
-              </div>
+              <UserAvatar user={entry.user} userId={entry.user.id} size="lg" />
               <div className="min-w-0">
                 <h2 className="truncate text-lg font-semibold text-slate-900">
                   {fullNameOf(entry.user)}

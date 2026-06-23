@@ -17,6 +17,8 @@ import type {
   RegisterRequest,
   RoleUpgradeRequest,
   Session,
+  SignedUrl,
+  StagedUpload,
   TokenResponse,
   UpdateMessageRequest,
   UpdateUserRequest,
@@ -124,6 +126,14 @@ export const usersApi = {
   myRoleUpgradeRequests(): Promise<RoleUpgradeRequest[]> {
     return request<RoleUpgradeRequest[]>("/users/me/role-upgrade-requests");
   },
+  uploadAvatar(file: File): Promise<User> {
+    const form = new FormData();
+    form.append("file", file);
+    return request<User>("/users/me/avatar", { method: "POST", formData: form });
+  },
+  deleteAvatar(): Promise<User> {
+    return request<User>("/users/me/avatar", { method: "DELETE" });
+  },
 };
 
 export const chatsApi = {
@@ -170,5 +180,25 @@ export const notificationsApi = {
   },
   markRead(notificationId: UUID): Promise<Notification> {
     return request<Notification>(`/notifications/${notificationId}/read`, { method: "PATCH" });
+  },
+};
+
+export const uploadsApi = {
+  stage(file: File): Promise<StagedUpload> {
+    const form = new FormData();
+    form.append("file", file);
+    return request<StagedUpload>("/uploads", { method: "POST", formData: form });
+  },
+  cancel(uploadId: UUID): Promise<void> {
+    return request<void>(`/uploads/${uploadId}`, { method: "DELETE" });
+  },
+};
+
+export const filesApi = {
+  avatarUrl(userId: UUID): Promise<SignedUrl | null> {
+    return request<SignedUrl | null>(`/files/avatars/${userId}`);
+  },
+  attachmentUrl(attachmentId: UUID): Promise<SignedUrl | null> {
+    return request<SignedUrl | null>(`/attachments/${attachmentId}/url`);
   },
 };

@@ -57,6 +57,11 @@ const subscribe = (cb: () => void) => {
 
 const getSnapshot = () => version;
 
+export function invalidateUser(id: UUID): void {
+  cache.delete(id);
+  notify();
+}
+
 export function useUser(id: UUID | undefined | null): Entry | undefined {
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   useEffect(() => {

@@ -31,9 +31,14 @@ class UserInDB:
     first_name: str = ""
     last_name: str = ""
     email_verified: bool = False
+    avatar_url: str | None = None  # storage_key в Object Storage
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=_utcnow)
     is_active: bool = True
+
+    @property
+    def has_avatar(self) -> bool:
+        return bool(self.avatar_url)
 
 
 @dataclass
@@ -50,11 +55,44 @@ class Chat:
 class Message:
     chat_id: UUID
     author_id: UUID
-    text: str
+    text: str = ""
     id: UUID = field(default_factory=uuid4)
     sent_at: datetime = field(default_factory=_utcnow)
     is_read: bool = False
     edited_at: datetime | None = None
+    attachments: list["Attachment"] = field(default_factory=list)
+
+
+AttachmentKind = Literal["image", "video", "audio", "file"]
+
+
+@dataclass
+class Attachment:
+    message_id: UUID
+    kind: AttachmentKind
+    storage_key: str
+    file_name: str | None = None
+    mime_type: str | None = None
+    size_bytes: int | None = None
+    checksum: str | None = None
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utcnow)
+
+
+@dataclass
+class StagedUpload:
+    uploader_id: UUID
+    storage_key: str
+    kind: AttachmentKind
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    checksum: str
+    expires_at: datetime
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_utcnow)
+    consumed_at: datetime | None = None
+    message_id: UUID | None = None
 
 
 @dataclass

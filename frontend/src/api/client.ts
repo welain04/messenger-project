@@ -65,6 +65,7 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
+  formData?: FormData;
   query?: Record<string, string | number | undefined> | Record<string, unknown>;
   auth?: boolean; // default true
   _retried?: boolean; // внутренний флаг: повтор после refresh
@@ -104,7 +105,7 @@ async function refreshTokens(): Promise<boolean> {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, query, auth = true, _retried = false } = options;
+  const { method = "GET", body, formData, query, auth = true, _retried = false } = options;
   const url = new URL(getApiBaseUrl() + path);
   if (query) {
     for (const [k, v] of Object.entries(query as Record<string, unknown>)) {
@@ -122,7 +123,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const res = await fetch(url.toString(), {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
 
   // Авто-refresh: один раз пробуем обновить токен и повторить запрос.
