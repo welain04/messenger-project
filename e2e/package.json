@@ -1,0 +1,17 @@
+{
+  "name": "online-school-messenger-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end тесты (Playwright) для Online School Messenger",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:install": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.0.0"
+  }
+}

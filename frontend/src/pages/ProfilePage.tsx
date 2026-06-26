@@ -218,6 +218,7 @@ export const ProfilePage = () => {
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              data-testid="profile-avatar-input"
               className="hidden"
               disabled={avatarSubmitting}
               onChange={handleAvatarChange}
@@ -226,6 +227,7 @@ export const ProfilePage = () => {
           {user.has_avatar && (
             <button
               type="button"
+              data-testid="profile-avatar-delete"
               onClick={handleAvatarDelete}
               disabled={avatarSubmitting}
               className="rounded-xl border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
@@ -254,6 +256,7 @@ export const ProfilePage = () => {
               minLength={3}
               maxLength={30}
               pattern="[A-Za-z0-9_]+"
+              data-testid="profile-nickname-input"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
@@ -263,6 +266,7 @@ export const ProfilePage = () => {
           <div className="mt-3 flex items-center gap-3">
             <button
               type="submit"
+              data-testid="profile-nickname-save"
               disabled={submitting || nickname.trim() === user.nickname}
               className="inline-flex items-center justify-center rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-600 disabled:opacity-60"
             >
@@ -323,6 +327,7 @@ export const ProfilePage = () => {
               <input
                 type="password"
                 required
+                data-testid="profile-password-current"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
@@ -334,6 +339,7 @@ export const ProfilePage = () => {
                 type="password"
                 required
                 minLength={6}
+                data-testid="profile-password-new"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
@@ -345,6 +351,7 @@ export const ProfilePage = () => {
                 type="password"
                 required
                 minLength={6}
+                data-testid="profile-password-confirm"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
@@ -361,6 +368,7 @@ export const ProfilePage = () => {
           </p>
           <button
             type="submit"
+            data-testid="profile-password-submit"
             disabled={passwordSubmitting}
             className="mt-3 inline-flex items-center justify-center rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-600 disabled:opacity-60"
           >

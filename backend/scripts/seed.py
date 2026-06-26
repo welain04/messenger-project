@@ -86,11 +86,11 @@ def main() -> None:
 
     # --- несколько уведомлений ---
     storage.create_notification(
-        Notification(user_id=bob.id, message="New message in chat personal", created_at=now - timedelta(minutes=25)),
+        Notification(user_id=bob.id, message="Новое сообщение в личном чате", created_at=now - timedelta(minutes=25)),
         ntype="new_message",
     )
     storage.create_notification(
-        Notification(user_id=carol.id, message="You were added to a chat: Math 101",
+        Notification(user_id=carol.id, message="Вас добавили в чат: Math 101",
                      created_at=now - timedelta(minutes=20)),
         ntype="added_to_chat",
     )

@@ -137,6 +137,7 @@ export const ChatsPage = () => {
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as ChatType)}
+                data-testid="chats-type-select"
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
               >
                 <option value="group">Групповой</option>
@@ -152,6 +153,7 @@ export const ChatsPage = () => {
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={type === "personal"}
                 maxLength={100}
+                data-testid="chats-title-input"
                 placeholder={type === "group" ? "Vibe Coding · 1 поток" : "—"}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1 disabled:bg-slate-100"
               />
@@ -168,6 +170,7 @@ export const ChatsPage = () => {
                     e.preventDefault();
                   }
                 }}
+                data-testid="chats-participant-search"
                 placeholder="Введите никнейм (минимум 2 символа)"
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
               />
@@ -201,6 +204,7 @@ export const ChatsPage = () => {
                     <button
                       key={u.id}
                       type="button"
+                      data-testid="chats-search-result"
                       onClick={() => addParticipant(u)}
                       className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs hover:bg-slate-100"
                     >
@@ -216,6 +220,7 @@ export const ChatsPage = () => {
           <div className="mt-3 flex items-center gap-3">
             <button
               type="submit"
+              data-testid="chats-create-button"
               disabled={submitting}
               className="inline-flex items-center justify-center rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-card transition hover:bg-primary-600 disabled:opacity-60"
             >

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import audit, storage
 from ..deps import get_current_user, require_verified_email
-from ..models import Chat, Notification, UserInDB
+from ..models import Chat, Notification, UserInDB, UserRole
 from ..permissions import Permission, has_permission
 from ..schemas import (
     AddParticipantRequest,
@@ -30,15 +30,17 @@ def _ensure_participant(chat: Chat, user: UserInDB) -> None:
 
 
 def _ensure_can_manage_members(chat: Chat, user: UserInDB) -> None:
-    # Управлять участниками может владелец чата (chat-scoped) либо обладатель
-    # глобального права manage_chat_members (curator/admin).
+    # Управлять участниками может создатель чата; администратор — в любом групповом чате.
+    # Куратор — только в групповых чатах, которые он сам создал (created_by).
     if user.id == chat.created_by:
         return
-    if has_permission(user.role, Permission.MANAGE_CHAT_MEMBERS):
+    if user.role == UserRole.admin and has_permission(
+        user.role, Permission.MANAGE_CHAT_MEMBERS
+    ):
         return
     raise HTTPException(
         status.HTTP_403_FORBIDDEN,
-        "Управлять участниками может создатель чата или куратор",
+        "Управлять участниками может создатель чата или администратор",
     )
 
 

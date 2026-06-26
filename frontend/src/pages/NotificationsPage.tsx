@@ -78,6 +78,7 @@ export const NotificationsPage = () => {
         {items.map((notification) => (
           <div
             key={notification.id}
+            data-testid="notification-item"
             className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-2.5 ${
               notification.is_read
                 ? "border-slate-200 bg-slate-50 text-slate-700"
@@ -92,7 +93,7 @@ export const NotificationsPage = () => {
                   </span>
                 )}
               </div>
-              <p>{notification.message}</p>
+              <p data-testid="notification-message">{notification.message}</p>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <div className="text-[10px] text-slate-400">{formatDateTime(notification.created_at)}</div>

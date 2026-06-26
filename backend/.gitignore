@@ -5,6 +5,7 @@ __pycache__/
 venv/
 env/
 .env
+.env.test
 .idea/
 .vscode/
 *.egg-info/
@@ -14,3 +15,6 @@ env/
 *.db-wal
 *.db-shm
 .smoke_test.db*
+
+# Локальное хранилище файлов из E2E-прогона (артефакт тестовой среды)
+e2e_uploads/

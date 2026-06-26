@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic import model_validator
@@ -14,8 +15,11 @@ _INSECURE_SECRETS = {
 class Settings(BaseSettings):
     """Конфигурация приложения, читаемая из переменных окружения / .env."""
 
+    # По умолчанию читаем .env. Для тестовой среды можно указать другой файл
+    # через переменную ENV_FILE (например, ENV_FILE=.env.test). Явные
+    # переменные окружения всё равно имеют приоритет над файлом.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.getenv("ENV_FILE", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -23,6 +27,10 @@ class Settings(BaseSettings):
 
     # development | production. В production запрещён небезопасный JWT_SECRET.
     APP_ENV: str = "development"
+
+    # Включает вспомогательные тестовые эндпоинты (/api/v1/_test/*) для E2E.
+    # ВНИМАНИЕ: только для тестовой среды. В production должно быть False.
+    ENABLE_TEST_ENDPOINTS: bool = False
 
     JWT_SECRET: str = "change-me"
     JWT_ALGORITHM: str = "HS256"

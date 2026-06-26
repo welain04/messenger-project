@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -5,12 +6,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from .. import audit, storage
 from ..deps import get_current_user, require_verified_email
 from ..deps_storage import get_file_service
-from ..models import Chat, Message, Notification, UserInDB
+from ..models import Chat, Message, Notification, UserInDB, UserRole
 from ..permissions import Permission, has_permission
 from ..schemas import AttachmentOut, MessageCreateRequest, MessageOut, MessageUpdateRequest, SignedUrlOut
 from ..services.files import FileService
 
 router = APIRouter(tags=["messages"])
+
+_OWN_MESSAGE_DELETE_WINDOW = timedelta(hours=24)
+
+
+def _within_own_message_delete_window(sent_at: datetime) -> bool:
+    if sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - sent_at <= _OWN_MESSAGE_DELETE_WINDOW
 
 
 def _message_to_out(msg: Message) -> MessageOut:
@@ -85,13 +94,18 @@ def send_message(
         msg = Message(chat_id=chat_id, author_id=current.id, text=text)
         storage.create_message(msg, body=text)
 
+    notification_text = (
+        f"Новое сообщение в чате «{chat.title}»"
+        if chat.type == "group" and chat.title
+        else "Новое сообщение в личном чате"
+    )
     for pid in chat.participant_ids:
         if pid == current.id:
             continue
         storage.create_notification(
             Notification(
                 user_id=pid,
-                message=f"New message in chat {chat.title or 'personal'}",
+                message=notification_text,
             ),
             ntype="new_message",
             actor_id=current.id,
@@ -134,12 +148,32 @@ def delete_message(
     current: UserInDB = Depends(get_current_user),
 ) -> None:
     msg = _get_message_or_404(message_id)
+    chat = _get_chat_or_404(msg.chat_id)
     is_author = msg.author_id == current.id
-    if not is_author and not has_permission(current.role, Permission.DELETE_ANY_MESSAGE):
+
+    if is_author:
+        if not _within_own_message_delete_window(msg.sent_at):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Удалить своё сообщение можно только в течение 24 часов после отправки",
+            )
+    elif current.role == UserRole.admin and has_permission(
+        current.role, Permission.DELETE_ANY_MESSAGE
+    ):
+        pass
+    elif (
+        current.role == UserRole.curator
+        and chat.type == "group"
+        and chat.created_by == current.id
+    ):
+        pass
+    else:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Удалить сообщение может только автор или куратор",
+            "Удалить чужое сообщение может только создатель группового чата (куратор) "
+            "или администратор; в личных чатах — только свои сообщения в течение 24 часов",
         )
+
     storage.soft_delete_message(message_id)
     if not is_author:
         # Удаление чужого сообщения модератором — фиксируем в аудите.

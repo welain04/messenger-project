@@ -57,6 +57,14 @@ def create_app() -> FastAPI:
     api_v1.include_router(files.router)
     api_v1.include_router(notifications.router)
     api_v1.include_router(admin.router)
+
+    # Вспомогательные эндпоинты для E2E-тестов — только при явном включении.
+    if settings.ENABLE_TEST_ENDPOINTS:
+        from .routers import test_support
+
+        api_v1.include_router(test_support.router)
+        logger.warning("Test-support endpoints are ENABLED (/api/v1/_test/*)")
+
     app.include_router(api_v1)
 
     @app.get("/health", tags=["meta"])

@@ -63,6 +63,7 @@ export const AuthPage = () => {
       <div className="mb-5 inline-flex rounded-full bg-slate-100 p-1 text-[11px] text-slate-500">
         <button
           type="button"
+          data-testid="auth-tab-login"
           onClick={() => { setMode("login"); setError(null); setShowPassword(false); }}
           className={`flex-1 rounded-full px-4 py-1.5 transition ${
             mode === "login" ? "bg-primary-500 text-white shadow-card" : "hover:text-slate-900"
@@ -72,6 +73,7 @@ export const AuthPage = () => {
         </button>
         <button
           type="button"
+          data-testid="auth-tab-register"
           onClick={() => { setMode("register"); setError(null); setShowPassword(false); }}
           className={`flex-1 rounded-full px-4 py-1.5 transition ${
             mode === "register" ? "bg-primary-500 text-white shadow-card" : "hover:text-slate-900"
@@ -89,6 +91,7 @@ export const AuthPage = () => {
             minLength={3}
             maxLength={30}
             pattern="[A-Za-z0-9_]+"
+            data-testid="auth-nickname"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
@@ -101,25 +104,27 @@ export const AuthPage = () => {
             <div>
               <label className="mb-1 block text-xs text-slate-600">Имя</label>
               <input
-                required
-                minLength={1}
-                maxLength={50}
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-                placeholder="Алиса"
+              required
+              minLength={1}
+              maxLength={50}
+              data-testid="auth-first-name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
+              placeholder="Алиса"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs text-slate-600">Фамилия</label>
               <input
-                required
-                minLength={1}
-                maxLength={50}
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-                placeholder="Андерсон"
+              required
+              minLength={1}
+              maxLength={50}
+              data-testid="auth-last-name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
+              placeholder="Андерсон"
               />
             </div>
           </div>
@@ -131,6 +136,7 @@ export const AuthPage = () => {
             <input
               type="email"
               required
+              data-testid="auth-email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
@@ -146,6 +152,7 @@ export const AuthPage = () => {
               type={showPassword ? "text" : "password"}
               required
               minLength={6}
+              data-testid="auth-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
@@ -187,6 +194,7 @@ export const AuthPage = () => {
 
         <button
           type="submit"
+          data-testid="auth-submit"
           disabled={submitting}
           className="mt-2 inline-flex w-full items-center justify-center rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white shadow-card transition hover:bg-primary-600 disabled:opacity-60"
         >

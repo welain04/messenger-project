@@ -127,6 +127,9 @@ def main() -> None:
     assert r.status_code == 200 and len(r.json()) == 1
 
     r = c.delete(f"/api/v1/messages/{msg['id']}", headers=b_h)
+    assert r.status_code == 403, r.text
+
+    r = c.delete(f"/api/v1/messages/{msg['id']}", headers=a_h)
     assert r.status_code == 204, r.text
 
     r = c.get("/api/v1/chats", headers=a_h)

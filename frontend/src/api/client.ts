@@ -4,7 +4,9 @@ const ACCESS_KEY = "messenger.token";
 const REFRESH_KEY = "messenger.refresh";
 
 export function getApiBaseUrl(): string {
-  const fromEnv = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
+  // ВАЖНО: обращение к `import.meta.env` должно быть «цельным» токеном — иначе
+  // Vite не подставит переменные окружения (VITE_API_BASE_URL не применится).
+  const fromEnv = import.meta.env.VITE_API_BASE_URL as string | undefined;
   return (fromEnv && fromEnv.replace(/\/$/, "")) || "http://localhost:8000/api/v1";
 }
 

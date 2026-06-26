@@ -15,6 +15,7 @@ export const UnreadBadge = ({ count, className = "", size = "md" }: UnreadBadgeP
 
   return (
     <span
+      data-testid="unread-badge"
       className={`inline-flex items-center justify-center rounded-full bg-rose-500 font-bold leading-none text-white shadow-sm ${sizeClasses} ${className}`}
       aria-label={`Непрочитанных: ${count}`}
     >
