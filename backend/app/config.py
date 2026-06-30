@@ -47,6 +47,14 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # За обратным прокси (nginx и т.п.) реальный IP клиента приходит в
+    # X-Forwarded-For. Доверять заголовку можно ТОЛЬКО когда приложение
+    # действительно стоит за доверенным прокси, иначе клиент подделает IP и
+    # обойдёт rate limit. По умолчанию выключено (используется прямой peer IP).
+    TRUST_PROXY_HEADERS: bool = False
+    # Число доверенных прокси перед приложением (1 = только nginx).
+    TRUSTED_PROXY_COUNT: int = 1
+
     # Rate limiting (запросов в минуту на один IP). 0 -> лимит отключён.
     RATE_LIMIT_LOGIN_PER_MIN: int = 5
     RATE_LIMIT_REGISTER_PER_MIN: int = 5
@@ -120,6 +128,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "В production необходимо задать надёжный JWT_SECRET в .env "
                 "(текущее значение является небезопасным значением по умолчанию)."
+            )
+        if self.is_production and self.ENABLE_TEST_ENDPOINTS:
+            raise ValueError(
+                "В production тестовые эндпоинты должны быть выключены: "
+                "установите ENABLE_TEST_ENDPOINTS=false."
             )
         return self
 

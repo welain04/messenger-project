@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
+import filetype
 from fastapi import HTTPException, UploadFile, status
 
 from .. import storage as db_storage
@@ -20,6 +21,11 @@ from .storage.base import SignedUrl, StorageError, StorageService
 logger = logging.getLogger("messenger.files")
 
 AttachmentKind = str
+
+# Текстовые форматы без устойчивой бинарной сигнатуры — filetype их не
+# определяет, поэтому для них (и только если тип в allowlist) доверяем
+# заявленному Content-Type.
+_SNIFF_EXEMPT_MIMES = {"text/plain"}
 
 
 class FileService:
@@ -79,6 +85,26 @@ class FileService:
                 return
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Недопустимый тип файла")
 
+    def _resolve_content_type(self, data: bytes, declared: str, allowed: list[str]) -> str:
+        """Определяет реальный MIME по содержимому (magic bytes) и сверяет с allowlist.
+
+        Возвращает фактический content-type для хранения. Заявленному клиентом
+        Content-Type доверяем только для текстовых форматов без сигнатуры
+        (см. _SNIFF_EXEMPT_MIMES), чтобы нельзя было замаскировать бинарь под
+        разрешённый тип.
+        """
+        kind = filetype.guess(data)
+        sniffed = kind.mime if kind else None
+        if sniffed is not None:
+            self._check_mime(sniffed, allowed)
+            return sniffed
+        # Сигнатура не распознана: допускаем лишь заявленный текстовый тип,
+        # дополнительно отсекая бинарные данные по NUL-байту.
+        if declared in _SNIFF_EXEMPT_MIMES and b"\x00" not in data:
+            self._check_mime(declared, allowed)
+            return declared
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Недопустимый тип файла")
+
     def _checksum(self, data: bytes) -> str:
         return hashlib.sha256(data).hexdigest()
 
@@ -98,8 +124,10 @@ class FileService:
     # --------------------------- avatars ---------------------------
 
     def upload_avatar(self, user: UserInDB, file: UploadFile) -> UserInDB:
-        data, content_type = self._read_upload(file, self._settings.AVATAR_MAX_BYTES)
-        self._check_mime(content_type, self._settings.allowed_avatar_mimes_list)
+        data, declared = self._read_upload(file, self._settings.AVATAR_MAX_BYTES)
+        content_type = self._resolve_content_type(
+            data, declared, self._settings.allowed_avatar_mimes_list
+        )
 
         ext = self._avatar_ext(content_type)
         key = f"avatars/{user.id}/{uuid4()}{ext}"
@@ -139,8 +167,10 @@ class FileService:
     # --------------------------- staged uploads ---------------------------
 
     def stage_upload(self, user: UserInDB, file: UploadFile) -> StagedUpload:
-        data, content_type = self._read_upload(file, self._settings.ATTACHMENT_MAX_BYTES)
-        self._check_mime(content_type, self._settings.allowed_attachment_mimes_list)
+        data, declared = self._read_upload(file, self._settings.ATTACHMENT_MAX_BYTES)
+        content_type = self._resolve_content_type(
+            data, declared, self._settings.allowed_attachment_mimes_list
+        )
 
         upload_id = uuid4()
         key = f"staging/{user.id}/{upload_id}"

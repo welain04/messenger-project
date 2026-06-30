@@ -21,16 +21,31 @@ backend/
     db.py              # подключение к SQLite, init_db() (Alembic), database_url()
     dialect.py         # различия SQLite/PostgreSQL (диалект, LIKE/ILIKE, bool)
     alembic_runner.py  # программный запуск миграций Alembic
+    migrations.py      # легаси ADD COLUMN-миграции для старых SQLite-баз
     schema.sql         # снимок DDL v1 (используется baseline-миграцией)
     storage.py         # слой доступа к данным (SQL-запросы), модели на входе/выходе
     models.py          # dataclass-модели UserInDB, Chat, Message, Notification
     schemas.py         # Pydantic-схемы запросов/ответов
+    errors.py          # человекочитаемые ошибки валидации (без stack trace)
+    rate_limit.py      # in-memory rate limiter (логин/регистрация и др.)
+    permissions.py     # проверки прав доступа
+    audit.py           # запись действий в audit_logs
+    mailer.py          # отправка/логирование писем (verify / reset)
+    deps_storage.py    # DI для StorageService / FileService
+    services/
+      files.py         # валидация (размер/тип по содержимому), оркестрация загрузок
+      storage/         # провайдеры хранилища: local, yandex_s3
     routers/
-      auth.py
-      users.py
+      auth.py          # register/login/refresh/logout, verify-email, сброс пароля
+      users.py         # профиль, аватар, сессии, заявки на повышение роли
       chats.py
       messages.py
+      uploads.py       # staged-загрузки файлов
+      files.py         # presigned-URL, отдача локальных файлов
       notifications.py
+      admin.py         # управление пользователями/ролями, audit-logs
+      test_support.py  # вспомогательные ручки для E2E (только при ENABLE_TEST_ENDPOINTS)
+  static/              # test.html (ручная страница проверки API)
   scripts/
     export_openapi.py  # пишет openapi.json
     smoke_test.py      # сквозной TestClient-сценарий
@@ -70,14 +85,29 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### Переменные окружения
 
+Полный список с комментариями — в `.env.example`. Основные:
+
 | Имя                          | Назначение                                 | По умолчанию                                                |
 |------------------------------|--------------------------------------------|-------------------------------------------------------------|
+| `APP_ENV`                    | `development` \| `production` \| `test`     | `development`                                               |
 | `JWT_SECRET`                 | секрет подписи JWT                         | `change-me`                                                 |
 | `JWT_ALGORITHM`              | алгоритм JWT                               | `HS256`                                                     |
-| `ACCESS_TOKEN_EXPIRE_MINUTES`| TTL access-токена в минутах                | `1440`                                                      |
+| `ACCESS_TOKEN_EXPIRE_MINUTES`| TTL access-токена в минутах                | `15`                                                        |
+| `REFRESH_TOKEN_EXPIRE_DAYS`  | TTL refresh-токена в днях                  | `30`                                                        |
 | `DATABASE_PATH`              | путь к файлу SQLite                        | `<backend>/messenger.db`                                    |
 | `DATABASE_URL`              | URL для Alembic/Postgres (пусто → SQLite)  | _(пусто)_                                                   |
-| `CORS_ORIGINS`               | разрешённые origin'ы через запятую         | `http://localhost:5173,http://127.0.0.1:5173`               |
+| `CORS_ORIGINS`               | разрешённые origin'ы через запятую (не `*`)| `http://localhost:5173,http://127.0.0.1:5173`               |
+| `ENABLE_TEST_ENDPOINTS`      | тестовые ручки `/api/v1/_test/*` (E2E)     | `false`                                                     |
+| `RATE_LIMIT_LOGIN_PER_MIN`   | лимит логинов в минуту на IP (`0` — выкл.) | `5`                                                         |
+| `RATE_LIMIT_REGISTER_PER_MIN`| лимит регистраций в минуту на IP           | `5`                                                         |
+| `RATE_LIMIT_FORGOT_PASSWORD_PER_MIN` | лимит запросов сброса пароля       | `3`                                                         |
+| `TRUST_PROXY_HEADERS`        | учитывать `X-Forwarded-For` (за прокси)    | `false`                                                     |
+| `TRUSTED_PROXY_COUNT`        | число доверенных прокси перед приложением  | `1`                                                         |
+| `STORAGE_PROVIDER`           | `local` (dev) или `yandex` (S3)            | `local`                                                     |
+| `AVATAR_MAX_BYTES`           | макс. размер аватара                       | `5242880` (5 МБ)                                            |
+| `ATTACHMENT_MAX_BYTES`       | макс. размер вложения                      | `20971520` (20 МБ)                                          |
+| `ALLOWED_AVATAR_MIMES`       | белый список MIME для аватаров             | `image/jpeg,image/png,image/webp`                          |
+| `ALLOWED_ATTACHMENT_MIMES`   | белый список MIME для вложений             | _(см. `.env.example`)_                                      |
 | `HOST` / `PORT`              | для собственных скриптов запуска           | `0.0.0.0` / `8000`                                          |
 
 ## Эндпоинты (`/api/v1`)
@@ -125,6 +155,38 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `title` группового чата: 1..100 символов
 - личный чат: ровно 2 участника, `title` запрещён
 - групповой чат: ≥ 2 участника, `title` обязателен
+
+## Безопасность
+
+Реализованные меры:
+
+- **SQL-инъекции** — все запросы в `storage.py`/`db.py` параметризованы (`?`-плейсхолдеры);
+  f-строки в SQL содержат только внутренние константы, не пользовательский ввод.
+- **CORS** (`app/main.py`) — белый список origin'ов (`CORS_ORIGINS`, не `*`),
+  суженные методы (`GET/POST/PATCH/DELETE/OPTIONS`) и заголовки (`Authorization, Content-Type`).
+- **Rate limit** (`app/rate_limit.py`) — на логин, регистрацию, refresh, подтверждение
+  email и сброс пароля. Ключ — IP клиента; за прокси включается через `TRUST_PROXY_HEADERS`
+  (с защитой от подделки `X-Forwarded-For`). Хранилище счётчиков — in-memory (для нескольких
+  инстансов нужен Redis).
+- **Ошибки наружу** — без stack trace; ошибки валидации переводятся в человекочитаемые
+  русские сообщения (`app/errors.py`).
+- **Загрузка файлов** (`app/services/files.py`) — проверка размера (413) и реального типа
+  по сигнатуре содержимого через `filetype` (а не только по присланному `Content-Type`),
+  сверка с белым списком MIME (415).
+- **Секреты** — только в `.env` (в `.gitignore`); в коде секретов нет.
+- **Защита конфигурации** (`app/config.py`) — при `APP_ENV=production` приложение
+  не стартует со слабым `JWT_SECRET` или с включёнными тестовыми эндпоинтами.
+
+### Чек-лист перед продакшеном
+
+1. `APP_ENV=production` и стойкий `JWT_SECRET`
+   (`python -c "import secrets; print(secrets.token_urlsafe(64))"`).
+2. `CORS_ORIGINS` — реальный домен фронтенда (например `https://app.example.com`).
+3. `ENABLE_TEST_ENDPOINTS=false`.
+4. За nginx: `TRUST_PROXY_HEADERS=true`, корректный `TRUSTED_PROXY_COUNT`
+   и `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+5. Боевые `STORAGE_PROVIDER`/S3-ключи и `SMTP_*` заданы и не закоммичены.
+6. (При нескольких воркерах/инстансах) вынести rate limit в Redis.
 
 ## Полезные скрипты
 

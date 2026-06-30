@@ -17,6 +17,8 @@ from threading import Lock
 
 from fastapi import HTTPException, Request, status
 
+from .config import get_settings
+
 _buckets: dict[str, deque[float]] = defaultdict(deque)
 _lock = Lock()
 
@@ -36,6 +38,19 @@ def _hit(key: str, limit: int, window_seconds: float) -> bool:
 
 
 def _client_ip(request: Request) -> str:
+    settings = get_settings()
+    # X-Forwarded-For учитываем только при явном доверии к прокси, иначе его
+    # легко подделать и обойти лимит. Заголовок строится слева направо
+    # (leftmost — исходный клиент, rightmost — ближайший прокси); каждый
+    # доверенный прокси добавляет один элемент справа, поэтому реальный клиент
+    # находится на позиции -TRUSTED_PROXY_COUNT.
+    if settings.TRUST_PROXY_HEADERS:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            parts = [p.strip() for p in xff.split(",") if p.strip()]
+            if parts:
+                count = max(1, settings.TRUSTED_PROXY_COUNT)
+                return parts[-count] if count <= len(parts) else parts[0]
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
