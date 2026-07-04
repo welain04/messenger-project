@@ -11,13 +11,24 @@ COPY frontend/ .
 # Явно — на случай если .dockerignore отфильтровал .env.*
 COPY frontend/.env.production .env.production
 
-ARG VITE_API_BASE_URL=
+# Optional build-arg; без значения по умолчанию — иначе пустой ARG блокирует .env.production в Vite.
+ARG VITE_API_BASE_URL
 RUN set -e; \
-    if [ -n "$VITE_API_BASE_URL" ]; then export VITE_API_BASE_URL="$VITE_API_BASE_URL"; \
-    elif [ -f .env.production ]; then echo "build: using .env.production"; \
-    else echo "build: нужен frontend/.env.production или --build-arg VITE_API_BASE_URL" >&2; ls -la; exit 1; \
+    if [ "${VITE_API_BASE_URL:-}" != "" ]; then \
+      export VITE_API_BASE_URL="$VITE_API_BASE_URL"; \
+      echo "build: VITE_API_BASE_URL from build-arg=$VITE_API_BASE_URL"; \
+    elif [ -f .env.production ]; then \
+      unset VITE_API_BASE_URL 2>/dev/null || true; \
+      set -a && . ./.env.production && set +a; \
+      echo "build: VITE_API_BASE_URL from .env.production=$VITE_API_BASE_URL"; \
+    else \
+      echo "build: нужен frontend/.env.production или --build-arg VITE_API_BASE_URL" >&2; \
+      ls -la; exit 1; \
     fi; \
-    npm run build
+    test -n "$VITE_API_BASE_URL" || (echo "build: VITE_API_BASE_URL пуст" >&2 && exit 1); \
+    npm run build; \
+    grep -rq "amvera.io" dist/assets/ || (echo "build: URL backend не попал в бандл" >&2 && exit 1); \
+    echo "build: OK — API URL вшит в dist/"
 
 FROM nginx:1.27-alpine
 
