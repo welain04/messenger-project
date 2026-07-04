@@ -37,6 +37,9 @@ _refresh_rate_limit = RateLimiter(_settings.RATE_LIMIT_LOGIN_PER_MIN * 4, 60, "r
 _forgot_password_rate_limit = RateLimiter(
     _settings.RATE_LIMIT_FORGOT_PASSWORD_PER_MIN, 60, "forgot_password"
 )
+_reset_password_rate_limit = RateLimiter(
+    _settings.RATE_LIMIT_RESET_PASSWORD_PER_MIN, 60, "reset_password"
+)
 
 
 def _access_token_for(user: UserInDB, sid: UUID) -> str:
@@ -91,6 +94,11 @@ def _issue_verification_email(user: UserInDB) -> None:
     dependencies=[Depends(_register_rate_limit)],
 )
 def register(payload: RegisterRequest) -> MePrivate:
+    if not get_settings().ALLOW_PUBLIC_REGISTRATION:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Регистрация закрыта. Обратитесь к администратору",
+        )
     if storage.get_user_by_nickname(payload.nickname) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Этот никнейм уже занят")
     if storage.get_user_by_email(payload.email) is not None:
@@ -292,7 +300,11 @@ def forgot_password(payload: ForgotPasswordRequest) -> dict[str, str]:
     return {"detail": "Если аккаунт существует, на email отправлена ссылка для сброса пароля"}
 
 
-@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(_reset_password_rate_limit)],
+)
 def reset_password(payload: ResetPasswordRequest) -> None:
     row = storage.get_active_password_reset_token(hash_token(payload.token))
     if row is None:

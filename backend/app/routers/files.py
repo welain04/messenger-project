@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 
-from ..deps import get_current_user
+from ..deps import require_verified_email
 from ..deps_storage import get_file_service, get_storage_service
 from ..models import UserInDB
 from ..schemas import SignedUrlOut
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 @router.get("/avatars/{user_id}", response_model=SignedUrlOut | None)
 def get_avatar_url(
     user_id: UUID,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
     files: FileService = Depends(get_file_service),
 ) -> SignedUrlOut | None:
     signed = files.get_avatar_signed_url(user_id, current)

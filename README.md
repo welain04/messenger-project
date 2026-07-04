@@ -32,6 +32,23 @@ npm run dev
 
 Приложение будет доступно на `http://127.0.0.1:5173`.
 
+Конфигурация фронтенда: шаблон `frontend/.env.example` (`VITE_API_BASE_URL`).
+Для локальной разработки fallback задан в коде (`http://localhost:8000/api/v1`).
+
+## Первый администратор (без очистки БД)
+
+Для production и staging используйте отдельный скрипт — **не** `scripts/seed.py`
+(он полностью стирает базу и создаёт тестовых пользователей с паролем `password123`):
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts\create_admin.py --nickname admin --email admin@school.ru
+```
+
+Пароль: аргумент `--password`, переменная `ADMIN_PASSWORD` или интерактивный ввод.
+Если в базе уже есть активный admin, скрипт завершится с ошибкой (используйте `--force`
+для добавления ещё одного).
+
 ## E2E (Playwright)
 
 ### Подготовка (один раз)
@@ -65,7 +82,9 @@ npm run test:e2e:report   # HTML-отчёт
 | `JWT_SECRET` | Секрет подписи JWT. Сгенерировать: `python -c "import secrets; print(secrets.token_urlsafe(64))"`. |
 | `CORS_ORIGINS` | Белый список origin'ов фронтенда через запятую (не `*`). |
 | `ENABLE_TEST_ENDPOINTS` | Тестовые ручки `/api/v1/_test/*` (только для E2E). В production должно быть `false`. |
-| `RATE_LIMIT_*_PER_MIN` | Лимиты запросов в минуту на IP (`0` — выключено). |
+| `ALLOW_PUBLIC_REGISTRATION` | Открытая регистрация (`false` — invite-only, 403 на register). |
+| `RATE_LIMIT_*_PER_MIN` | Лимиты запросов в минуту на IP (`0` — выключено), в т.ч. `RESET_PASSWORD`. |
+| `RATE_LIMIT_BACKEND` | `memory` (один процесс) или `redis` (заготовка для масштабирования). |
 | `TRUST_PROXY_HEADERS` / `TRUSTED_PROXY_COUNT` | Учитывать `X-Forwarded-For` за обратным прокси (включать только за доверенным прокси). |
 | `STORAGE_PROVIDER` | `local` (dev) или `yandex` (Yandex Object Storage). |
 | `AVATAR_MAX_BYTES` / `ATTACHMENT_MAX_BYTES` / `ALLOWED_*_MIMES` | Лимиты размера и белый список типов загружаемых файлов. |
@@ -75,20 +94,30 @@ npm run test:e2e:report   # HTML-отчёт
 - **SQL-инъекции** — все запросы параметризованы.
 - **XSS** — пользовательский текст рендерится через JSX (автоэкранирование React), без `dangerouslySetInnerHTML`.
 - **CORS** — белый список origin'ов, суженные методы и заголовки.
-- **Rate limit** — на логин, регистрацию, refresh, подтверждение email и сброс пароля.
+- **Rate limit** — на логин, регистрацию, refresh, подтверждение email, запрос и сброс пароля; бэкенд `memory`/`redis`.
+- **Пароли** — минимум 8 символов, буква и цифра.
+- **Email verification** — мессенджер (чаты, сообщения, уведомления, файлы) доступен только с подтверждённым email.
+- **Сессии** — access-токен проверяется по `sid`; отозванная сессия недействительна сразу.
+- **Регистрация** — по умолчанию открытая; `ALLOW_PUBLIC_REGISTRATION=false` для закрытой школы.
+- **Security headers** — в production автоматически (`X-Frame-Options`, `X-Content-Type-Options` и др.).
 - **Ошибки** — наружу без stack trace; ошибки валидации — человекочитаемые сообщения.
 - **Загрузка файлов** — проверка размера и реального типа по содержимому (magic bytes), а не только по `Content-Type`.
-- **Защита конфигурации** — в `production` приложение не стартует со слабым `JWT_SECRET` или с включёнными тестовыми эндпоинтами.
+- **Защита конфигурации** — в `production` приложение не стартует со слабым `JWT_SECRET`,
+  с включёнными тестовыми эндпоинтами, без SMTP, с `local`-хранилищем или с localhost в URL.
+  Отключаются `/docs`, `/redoc`, `/openapi.json`, `/test`.
 
 ### Чек-лист перед продакшеном
 
-1. `APP_ENV=production` и стойкий `JWT_SECRET` в `.env`.
-2. `CORS_ORIGINS` — реальный домен фронтенда (например `https://app.example.com`).
+1. `APP_ENV=production` и стойкий `JWT_SECRET` в `.env` (см. секцию 2 в `backend/.env.example`).
+2. `CORS_ORIGINS` и `FRONTEND_BASE_URL` — реальные публичные домены (без localhost).
 3. `ENABLE_TEST_ENDPOINTS=false`.
-4. За обратным прокси (nginx): `TRUST_PROXY_HEADERS=true`, корректный `TRUSTED_PROXY_COUNT`
+4. `SMTP_HOST` и учётные данные SMTP заданы.
+5. `STORAGE_PROVIDER=yandex` и заполнены `S3_*`.
+6. Сборка фронтенда с `VITE_API_BASE_URL` (см. `frontend/.env.example`).
+7. Первый admin: `backend/scripts/create_admin.py` (не `seed.py`).
+8. За обратным прокси (nginx): `TRUST_PROXY_HEADERS=true`, корректный `TRUSTED_PROXY_COUNT`
    и `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
-5. Боевые `STORAGE_PROVIDER`/S3-ключи и `SMTP_*` заданы и не закоммичены.
-6. (При нескольких воркерах/инстансах) вынести rate limit в Redis — общий счётчик.
+9. (При нескольких воркерах/инстансах) вынести rate limit в Redis — общий счётчик.
 
 ### Демонстрационный медленный прогон (slowMo)
 

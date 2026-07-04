@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 # Важно: задать путь до импорта app (get_settings читает env при первом вызове).
+os.environ["APP_ENV"] = "development"
+os.environ["SMTP_HOST"] = ""  # не использовать прод-SMTP из .env; токены из outbox
 os.environ.setdefault("DATABASE_PATH", str(ROOT / ".smoke_test.db"))
 # Отключаем rate limiting в smoke-тесте (много логинов с одного "IP").
 os.environ.setdefault("RATE_LIMIT_LOGIN_PER_MIN", "0")
@@ -22,6 +24,7 @@ os.environ.setdefault("RATE_LIMIT_REGISTER_PER_MIN", "0")
 os.environ.setdefault("RATE_LIMIT_SEARCH_PER_MIN", "0")
 os.environ.setdefault("RATE_LIMIT_VERIFY_PER_MIN", "0")
 os.environ.setdefault("RATE_LIMIT_FORGOT_PASSWORD_PER_MIN", "0")
+os.environ.setdefault("RATE_LIMIT_RESET_PASSWORD_PER_MIN", "0")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -35,7 +38,7 @@ def _register_and_verify(c, nickname: str, first: str, last: str) -> dict:
         "/api/v1/auth/register",
         json={
             "nickname": nickname,
-            "password": "secret1",
+            "password": "Secret123",
             "email": f"{nickname}@example.com",
             "first_name": first,
             "last_name": last,
@@ -61,12 +64,12 @@ def main() -> None:
     # Повышение роли — админское действие (через storage, а не через регистрацию).
     storage.set_role(UUID(bob["id"]), UserRole.curator)
 
-    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret123"})
     assert r.status_code == 200, r.text
     a_tok = r.json()["access_token"]
     a_h = {"Authorization": f"Bearer {a_tok}"}
 
-    r = c.post("/api/v1/auth/login", json={"nickname": "bob", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "bob", "password": "Secret123"})
     b_tok = r.json()["access_token"]
     b_h = {"Authorization": f"Bearer {b_tok}"}
 
@@ -151,14 +154,14 @@ def main() -> None:
         "/api/v1/auth/register",
         json={
             "nickname": "mallory",
-            "password": "secret1",
+            "password": "Secret123",
             "email": "mallory@example.com",
             "first_name": "Mallory",
             "last_name": "Quinn",
         },
     )
     assert r.status_code == 201, r.text
-    r = c.post("/api/v1/auth/login", json={"nickname": "mallory", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "mallory", "password": "Secret123"})
     m_h = {"Authorization": f"Bearer {r.json()['access_token']}"}
     r = c.post(
         "/api/v1/chats",
@@ -166,6 +169,8 @@ def main() -> None:
         headers=m_h,
     )
     assert r.status_code == 403, r.text  # email не подтверждён
+    r = c.get("/api/v1/chats", headers=m_h)
+    assert r.status_code == 403, r.text  # мессенджер только с подтверждённым email
 
     # Сразу после регистрации повторная отправка письма заблокирована cooldown.
     r = c.post("/api/v1/auth/resend-verification", headers=m_h)
@@ -183,7 +188,7 @@ def main() -> None:
     # Заводим админа напрямую (как сидинг) и логинимся.
     admin_user = _register_and_verify(c, "topadmin", "Top", "Admin")
     storage.set_role(UUID(admin_user["id"]), UserRole.admin)
-    r = c.post("/api/v1/auth/login", json={"nickname": "topadmin", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "topadmin", "password": "Secret123"})
     root_h = {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     r = c.get("/api/v1/admin/users", headers=root_h)
@@ -197,23 +202,23 @@ def main() -> None:
     r = c.patch(f"/api/v1/admin/users/{admin_user['id']}/role", json={"role": "student"}, headers=root_h)
     assert r.status_code == 400, r.text
 
-    # Блокировка пользователя: его токен перестаёт работать (403).
+    # Блокировка пользователя: сессии отзываются, access-токен недействителен.
     r = c.post(f"/api/v1/admin/users/{bob['id']}/suspend", headers=root_h)
     assert r.status_code == 200 and r.json()["is_active"] is False, r.text
     r = c.get("/api/v1/users/me", headers=b_h)
-    assert r.status_code == 403, r.text
+    assert r.status_code == 401, r.text
 
-    # Разблокировка возвращает доступ.
+    # Разблокировка: старые сессии не восстанавливаются — нужен новый логин.
     r = c.post(f"/api/v1/admin/users/{bob['id']}/activate", headers=root_h)
     assert r.status_code == 200 and r.json()["is_active"] is True, r.text
-    r = c.get("/api/v1/users/me", headers=b_h)
+    r = c.post("/api/v1/auth/login", json={"nickname": "bob", "password": "Secret123"})
     assert r.status_code == 200, r.text
 
     # ---- Заявки на повышение роли + аудит ----
     newbie = _register_and_verify(c, "newbie", "New", "Bee")
     nb_h = {
         "Authorization": "Bearer "
-        + c.post("/api/v1/auth/login", json={"nickname": "newbie", "password": "secret1"}).json()["access_token"]
+        + c.post("/api/v1/auth/login", json={"nickname": "newbie", "password": "Secret123"}).json()["access_token"]
     }
     r = c.post("/api/v1/users/me/role-upgrade-request", json={"reason": "хочу помогать"}, headers=nb_h)
     assert r.status_code == 201 and r.json()["status"] == "pending", r.text
@@ -240,7 +245,7 @@ def main() -> None:
     newbie2 = _register_and_verify(c, "newbie2", "New", "Two")
     nb2_h = {
         "Authorization": "Bearer "
-        + c.post("/api/v1/auth/login", json={"nickname": "newbie2", "password": "secret1"}).json()["access_token"]
+        + c.post("/api/v1/auth/login", json={"nickname": "newbie2", "password": "Secret123"}).json()["access_token"]
     }
     r = c.post("/api/v1/users/me/role-upgrade-request", json={}, headers=nb2_h)
     req2_id = r.json()["id"]
@@ -254,7 +259,7 @@ def main() -> None:
     assert r.status_code == 403, r.text
 
     # ---- Refresh-токены и сессии ----
-    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret123"})
     assert r.status_code == 200, r.text
     tokens = r.json()
     assert tokens["access_token"] and tokens["refresh_token"], tokens
@@ -280,35 +285,40 @@ def main() -> None:
     assert r.status_code == 401, r.text
 
     # Logout-all завершает все сессии пользователя.
-    r1 = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret1"}).json()
-    r2 = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret1"}).json()
+    r1 = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret123"}).json()
+    r2 = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret123"}).json()
     h_all = {"Authorization": f"Bearer {r1['access_token']}"}
     r = c.post("/api/v1/auth/logout-all", headers=h_all)
     assert r.status_code == 204, r.text
+    r = c.get("/api/v1/users/me", headers=h_all)
+    assert r.status_code == 401, r.text
     for t in (r1, r2):
         rr = c.post("/api/v1/auth/refresh", json={"refresh_token": t["refresh_token"]})
         assert rr.status_code == 401, rr.text
 
     # Блокировка завершает сессии: refresh перестаёт работать.
     victor = _register_and_verify(c, "victor", "Victor", "Vega")
-    vr = c.post("/api/v1/auth/login", json={"nickname": "victor", "password": "secret1"}).json()
+    vr = c.post("/api/v1/auth/login", json={"nickname": "victor", "password": "Secret123"}).json()
     r = c.post(f"/api/v1/admin/users/{victor['id']}/suspend", headers=root_h)
     assert r.status_code == 200, r.text
     rr = c.post("/api/v1/auth/refresh", json={"refresh_token": vr["refresh_token"]})
     assert rr.status_code == 401, rr.text
+    vh = {"Authorization": f"Bearer {vr['access_token']}"}
+    r = c.get("/api/v1/users/me", headers=vh)
+    assert r.status_code == 401, r.text
 
     # --- Смена пароля (авторизованный пользователь) ---
-    ar = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret1"}).json()
+    ar = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret123"}).json()
     ah = {"Authorization": f"Bearer {ar['access_token']}"}
     r = c.patch(
         "/api/v1/users/me/password",
         headers=ah,
-        json={"current_password": "secret1", "new_password": "secret2"},
+        json={"current_password": "Secret123", "new_password": "Secret234"},
     )
     assert r.status_code == 204, r.text
-    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret123"})
     assert r.status_code == 401, r.text
-    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "secret2"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "alice", "password": "Secret234"})
     assert r.status_code == 200, r.text
     # вернуть пароль alice для последующих прогонов в той же БД (не критично для smoke)
     ar2 = r.json()
@@ -316,7 +326,7 @@ def main() -> None:
     c.patch(
         "/api/v1/users/me/password",
         headers=ah2,
-        json={"current_password": "secret2", "new_password": "secret1"},
+        json={"current_password": "Secret234", "new_password": "Secret123"},
     )
 
     # --- Восстановление пароля по email ---
@@ -332,7 +342,7 @@ def main() -> None:
         json={"token": reset_token, "new_password": "newpass9"},
     )
     assert r.status_code == 204, r.text
-    r = c.post("/api/v1/auth/login", json={"nickname": "resetme", "password": "secret1"})
+    r = c.post("/api/v1/auth/login", json={"nickname": "resetme", "password": "Secret123"})
     assert r.status_code == 401, r.text
     r = c.post("/api/v1/auth/login", json={"nickname": "resetme", "password": "newpass9"})
     assert r.status_code == 200, r.text

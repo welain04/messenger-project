@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_HINT,
+  PASSWORD_PATTERN,
+  PASSWORD_TITLE,
+} from "../auth/passwordPolicy";
 import { formatApiError, usersApi } from "../api";
 import type { RoleUpgradeRequest, Session, UserRole } from "../api";
 import { ErrorBox, LoadingHint } from "../components/States";
@@ -338,10 +344,13 @@ export const ProfilePage = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
+                pattern={PASSWORD_PATTERN}
+                title={PASSWORD_TITLE}
                 data-testid="profile-password-new"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                placeholder={PASSWORD_HINT}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
               />
             </div>
@@ -350,7 +359,7 @@ export const ProfilePage = () => {
               <input
                 type="password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 data-testid="profile-password-confirm"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}

@@ -19,10 +19,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .. import mailer, storage
 from ..models import UserInDB, UserRole
+from ..password_policy import MIN_PASSWORD_LENGTH, validate_password_strength
 from ..security import hash_password
 
 router = APIRouter(prefix="/_test", tags=["test-support"])
@@ -30,12 +31,17 @@ router = APIRouter(prefix="/_test", tags=["test-support"])
 
 class CreateTestUserRequest(BaseModel):
     nickname: str = Field(..., min_length=3, max_length=30)
-    password: str = Field(default="Password123", min_length=6, max_length=100)
+    password: str = Field(default="Password123", min_length=MIN_PASSWORD_LENGTH, max_length=100)
     email: str | None = None
     first_name: str = "Test"
     last_name: str = "User"
     role: UserRole = UserRole.student
     email_verified: bool = True
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class TestUserOut(BaseModel):

@@ -17,6 +17,7 @@ from pydantic import (
 )
 
 from .models import UserRole
+from .password_policy import MIN_PASSWORD_LENGTH, validate_password_strength
 
 NICKNAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
 # Имя/фамилия: буквы (лат./кир.), пробел, дефис, апостроф.
@@ -51,10 +52,15 @@ class RegisterRequest(BaseModel):
     # Роль НЕ принимается от клиента: все новые пользователи — student.
     # Повышение до curator/admin выполняется только через админский флоу.
     nickname: str = Field(..., min_length=3, max_length=30)
-    password: str = Field(..., min_length=6, max_length=100)
+    password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=100)
     email: EmailStr
     first_name: str = Field(..., min_length=1, max_length=50)
     last_name: str = Field(..., min_length=1, max_length=50)
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
     @field_validator("nickname")
     @classmethod
@@ -107,7 +113,12 @@ class VerifyEmailRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=6, max_length=100)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=100)
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -116,7 +127,12 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=6, max_length=100)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH, max_length=100)
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class UserPublic(BaseModel):

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "npm --prefix ../e2e run test:e2e",
     "preview": "vite preview",
     "lint": "echo \"no linter configured\""
   },

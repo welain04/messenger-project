@@ -115,6 +115,12 @@ test.describe("Сценарий 1: Регистрация, подтвержде�
       await authPage.expectFieldInvalid(authPage.password);
     });
 
+    await test.step("Пароль без цифры отклоняется", async () => {
+      await authPage.fillRegister({ ...validBase, password: "abcdefgh" });
+      await authPage.registerSubmit.click();
+      await authPage.expectFieldInvalid(authPage.password);
+    });
+
     await test.step("Дублирование email отклоняется сервером", async () => {
       await authPage.fillRegister({
         ...validBase,

@@ -29,6 +29,48 @@ def _user_from_payload(payload: dict | None) -> UserInDB | None:
     return storage.get_user(user_id)
 
 
+def _sid_from_request(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    sid = getattr(request.state, "sid", None)
+    if sid:
+        return str(sid)
+    if credentials is not None:
+        payload = decode_access_token(credentials.credentials)
+        if payload and payload.get("sid"):
+            return str(payload["sid"])
+    return None
+
+
+def _ensure_active_session(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> None:
+    """Access-токен привязан к сессии (sid): отозванная сессия -> 401."""
+    sid = _sid_from_request(request, credentials)
+    if sid is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Сессия недействительна. Войдите снова",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        session_id = UUID(sid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Сессия недействительна. Войдите снова",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+    if not storage.is_session_active(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Сессия недействительна. Войдите снова",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 def _user_from_token(token: str | None) -> UserInDB | None:
     if not token:
         return None
@@ -39,8 +81,7 @@ def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> UserInDB:
-    """Достаём пользователя либо из request.state (положил middleware),
-    либо из Bearer-заголовка напрямую."""
+    """Достаём пользователя из request.state / Bearer и проверяем активность сессии."""
     user: UserInDB | None = getattr(request.state, "user", None)
     if user is None and credentials is not None:
         user = _user_from_token(credentials.credentials)
@@ -50,6 +91,7 @@ def get_current_user(
             detail="Не авторизован. Войдите в систему",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _ensure_active_session(request, credentials)
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -66,7 +108,13 @@ def get_current_user_or_none(
     user: UserInDB | None = getattr(request.state, "user", None)
     if user is None and credentials is not None:
         user = _user_from_token(credentials.credentials)
-    if user is not None and not user.is_active:
+    if user is None:
+        return None
+    try:
+        _ensure_active_session(request, credentials)
+    except HTTPException:
+        return None
+    if not user.is_active:
         return None
     return user
 
@@ -92,7 +140,7 @@ def require_verified_email(
     if not current.email_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Подтвердите email, чтобы выполнить это действие",
+            detail="Подтвердите email, чтобы пользоваться мессенджером",
         )
     return current
 

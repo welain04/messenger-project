@@ -1,49 +1,25 @@
-"""Простой in-memory rate limiter для MVP.
-
-Скользящее окно по ключу (по умолчанию — IP клиента). Потокобезопасен:
-sync-эндпоинты FastAPI выполняются в пуле потоков, поэтому используем Lock.
-
-Ограничения (осознанно для MVP):
-- состояние хранится в памяти процесса -> при нескольких воркерах лимиты
-  считаются раздельно. На этапе масштабирования заменяется на Redis без
-  изменения мест вызова (интерфейс-зависимость остаётся прежним).
-"""
+"""Rate limiter: FastAPI-зависимость поверх настраиваемого бэкенда (memory / redis)."""
 
 from __future__ import annotations
-
-import time
-from collections import defaultdict, deque
-from threading import Lock
 
 from fastapi import HTTPException, Request, status
 
 from .config import get_settings
+from .rate_limit_backends import MemoryRateLimitBackend, RateLimitBackend, create_rate_limit_backend
 
-_buckets: dict[str, deque[float]] = defaultdict(deque)
-_lock = Lock()
+_backend: RateLimitBackend | None = None
 
 
-def _hit(key: str, limit: int, window_seconds: float) -> bool:
-    """Возвращает True, если запрос в пределах лимита; иначе False."""
-    now = time.monotonic()
-    cutoff = now - window_seconds
-    with _lock:
-        bucket = _buckets[key]
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
-        if len(bucket) >= limit:
-            return False
-        bucket.append(now)
-        return True
+def _get_backend() -> RateLimitBackend:
+    global _backend
+    if _backend is None:
+        settings = get_settings()
+        _backend = create_rate_limit_backend(settings.RATE_LIMIT_BACKEND, settings.REDIS_URL)
+    return _backend
 
 
 def _client_ip(request: Request) -> str:
     settings = get_settings()
-    # X-Forwarded-For учитываем только при явном доверии к прокси, иначе его
-    # легко подделать и обойти лимит. Заголовок строится слева направо
-    # (leftmost — исходный клиент, rightmost — ближайший прокси); каждый
-    # доверенный прокси добавляет один элемент справа, поэтому реальный клиент
-    # находится на позиции -TRUSTED_PROXY_COUNT.
     if settings.TRUST_PROXY_HEADERS:
         xff = request.headers.get("x-forwarded-for")
         if xff:
@@ -57,18 +33,14 @@ def _client_ip(request: Request) -> str:
 
 
 def reset() -> None:
-    """Сброс состояния (для тестов)."""
-    with _lock:
-        _buckets.clear()
+    """Сброс состояния in-memory бэкенда (для тестов)."""
+    backend = _get_backend()
+    if isinstance(backend, MemoryRateLimitBackend):
+        backend.reset()
 
 
 class RateLimiter:
-    """FastAPI-зависимость: ограничивает число запросов на ключ за окно.
-
-    Использование:
-        login_limit = RateLimiter(limit=5, window_seconds=60, scope="login")
-        @router.post("/login", dependencies=[Depends(login_limit)])
-    """
+    """FastAPI-зависимость: ограничивает число запросов на ключ за окно."""
 
     def __init__(self, limit: int, window_seconds: float, scope: str) -> None:
         self.limit = limit
@@ -76,11 +48,10 @@ class RateLimiter:
         self.scope = scope
 
     def __call__(self, request: Request) -> None:
-        # limit <= 0 -> лимитирование отключено.
         if self.limit <= 0:
             return
         key = f"{self.scope}:{_client_ip(request)}"
-        if not _hit(key, self.limit, self.window_seconds):
+        if not _get_backend().hit(key, self.limit, self.window_seconds):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Слишком много запросов. Попробуйте позже",

@@ -11,6 +11,9 @@ _INSECURE_SECRETS = {
     "change-me-please-super-secret-key",
 }
 
+# Подстроки, недопустимые в публичных URL production-конфигурации.
+_LOCAL_HOST_MARKERS = ("localhost", "127.0.0.1")
+
 
 class Settings(BaseSettings):
     """Конфигурация приложения, читаемая из переменных окружения / .env."""
@@ -31,6 +34,14 @@ class Settings(BaseSettings):
     # Включает вспомогательные тестовые эндпоинты (/api/v1/_test/*) для E2E.
     # ВНИМАНИЕ: только для тестовой среды. В production должно быть False.
     ENABLE_TEST_ENDPOINTS: bool = False
+
+    # Открытая регистрация новых пользователей (роль student).
+    # false -> POST /auth/register возвращает 403 (invite-only / закрытая школа).
+    ALLOW_PUBLIC_REGISTRATION: bool = True
+
+    # Security headers (X-Frame-Options, X-Content-Type-Options и др.).
+    # По умолчанию включены в production; в development можно включить явно.
+    ENABLE_SECURITY_HEADERS: bool = False
 
     JWT_SECRET: str = "change-me"
     JWT_ALGORITHM: str = "HS256"
@@ -61,6 +72,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_SEARCH_PER_MIN: int = 30
     RATE_LIMIT_VERIFY_PER_MIN: int = 10
     RATE_LIMIT_FORGOT_PASSWORD_PER_MIN: int = 3
+    RATE_LIMIT_RESET_PASSWORD_PER_MIN: int = 10
+
+    # Rate limit: memory (один процесс) | redis (заготовка для нескольких инстансов).
+    RATE_LIMIT_BACKEND: str = "memory"
+    REDIS_URL: str = ""
 
     # Подтверждение email.
     FRONTEND_BASE_URL: str = "http://localhost:5173"
@@ -122,18 +138,72 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.APP_ENV.strip().lower() == "production"
 
+    @property
+    def security_headers_enabled(self) -> bool:
+        return self.is_production or self.ENABLE_SECURITY_HEADERS
+
+    @staticmethod
+    def _contains_local_host(value: str) -> bool:
+        lowered = value.strip().lower()
+        return any(marker in lowered for marker in _LOCAL_HOST_MARKERS)
+
     @model_validator(mode="after")
-    def _enforce_secret(self) -> "Settings":
-        if self.is_production and self.JWT_SECRET in _INSECURE_SECRETS:
+    def _enforce_production_rules(self) -> "Settings":
+        if not self.is_production:
+            return self
+
+        if self.JWT_SECRET in _INSECURE_SECRETS:
             raise ValueError(
                 "В production необходимо задать надёжный JWT_SECRET в .env "
                 "(текущее значение является небезопасным значением по умолчанию)."
             )
-        if self.is_production and self.ENABLE_TEST_ENDPOINTS:
+        if self.ENABLE_TEST_ENDPOINTS:
             raise ValueError(
                 "В production тестовые эндпоинты должны быть выключены: "
                 "установите ENABLE_TEST_ENDPOINTS=false."
             )
+        if not self.SMTP_HOST.strip():
+            raise ValueError(
+                "В production необходимо задать SMTP_HOST — иначе письма "
+                "подтверждения email и сброса пароля не дойдут до пользователей."
+            )
+        if self.STORAGE_PROVIDER.strip().lower() == "local":
+            raise ValueError(
+                "В production STORAGE_PROVIDER не может быть local — "
+                "используйте yandex (или другой S3-совместимый провайдер)."
+            )
+        provider = self.STORAGE_PROVIDER.strip().lower()
+        if provider == "yandex":
+            missing = [
+                name
+                for name, value in (
+                    ("S3_BUCKET", self.S3_BUCKET),
+                    ("S3_ACCESS_KEY", self.S3_ACCESS_KEY),
+                    ("S3_SECRET_KEY", self.S3_SECRET_KEY),
+                )
+                if not value.strip()
+            ]
+            if missing:
+                raise ValueError(
+                    "В production при STORAGE_PROVIDER=yandex необходимо задать: "
+                    + ", ".join(missing)
+                )
+        if self._contains_local_host(self.FRONTEND_BASE_URL):
+            raise ValueError(
+                "В production FRONTEND_BASE_URL не должен указывать на localhost "
+                "или 127.0.0.1 — задайте публичный URL фронтенда."
+            )
+        if not self.cors_origins_list:
+            raise ValueError(
+                "В production CORS_ORIGINS не может быть пустым — "
+                "укажите публичные origin'ы фронтенда через запятую."
+            )
+        for origin in self.cors_origins_list:
+            if self._contains_local_host(origin):
+                raise ValueError(
+                    f"В production CORS_ORIGINS не должен содержать localhost "
+                    f"или 127.0.0.1 (проблемный origin: {origin!r})."
+                )
         return self
 
 

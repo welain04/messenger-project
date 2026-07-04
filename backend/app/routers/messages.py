@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .. import audit, storage
-from ..deps import get_current_user, require_verified_email
+from ..deps import require_verified_email
 from ..deps_storage import get_file_service
 from ..models import Chat, Message, Notification, UserInDB, UserRole
 from ..permissions import Permission, has_permission
@@ -59,7 +59,7 @@ def list_messages(
     chat_id: UUID,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> list[MessageOut]:
     chat = _get_chat_or_404(chat_id)
     _ensure_participant(chat, current)
@@ -121,7 +121,7 @@ def send_message(
 def edit_message(
     message_id: UUID,
     payload: MessageUpdateRequest,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> MessageOut:
     msg = _get_message_or_404(message_id)
     if msg.author_id != current.id:
@@ -133,7 +133,7 @@ def edit_message(
 @router.get("/attachments/{attachment_id}/url", response_model=SignedUrlOut | None)
 def get_attachment_url(
     attachment_id: UUID,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
     files: FileService = Depends(get_file_service),
 ) -> SignedUrlOut | None:
     signed = files.get_attachment_signed_url(attachment_id, current)
@@ -145,7 +145,7 @@ def get_attachment_url(
 @router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_message(
     message_id: UUID,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> None:
     msg = _get_message_or_404(message_id)
     chat = _get_chat_or_404(msg.chat_id)

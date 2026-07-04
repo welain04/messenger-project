@@ -50,6 +50,7 @@ backend/
     export_openapi.py  # пишет openapi.json
     smoke_test.py      # сквозной TestClient-сценарий
     seed.py            # наполнение БД тестовыми данными
+    create_admin.py    # первый admin без очистки БД (для staging/production)
   alembic.ini          # конфигурация Alembic
   alembic/             # env.py + versions/ (миграции схемы)
   messenger.db         # файл SQLite (создаётся автоматически, в .gitignore)
@@ -98,9 +99,14 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `DATABASE_URL`              | URL для Alembic/Postgres (пусто → SQLite)  | _(пусто)_                                                   |
 | `CORS_ORIGINS`               | разрешённые origin'ы через запятую (не `*`)| `http://localhost:5173,http://127.0.0.1:5173`               |
 | `ENABLE_TEST_ENDPOINTS`      | тестовые ручки `/api/v1/_test/*` (E2E)     | `false`                                                     |
+| `ALLOW_PUBLIC_REGISTRATION`  | открытая регистрация (`false` — invite-only)| `true`                                                     |
+| `ENABLE_SECURITY_HEADERS`    | security headers вне production            | `false` (в production — автоматически)                      |
 | `RATE_LIMIT_LOGIN_PER_MIN`   | лимит логинов в минуту на IP (`0` — выкл.) | `5`                                                         |
 | `RATE_LIMIT_REGISTER_PER_MIN`| лимит регистраций в минуту на IP           | `5`                                                         |
 | `RATE_LIMIT_FORGOT_PASSWORD_PER_MIN` | лимит запросов сброса пароля       | `3`                                                         |
+| `RATE_LIMIT_RESET_PASSWORD_PER_MIN`  | лимит применения токена сброса     | `10`                                                        |
+| `RATE_LIMIT_BACKEND`         | `memory` или `redis` (заготовка)           | `memory`                                                    |
+| `REDIS_URL`                  | URL Redis (для `RATE_LIMIT_BACKEND=redis`)   | _(пусто)_                                                   |
 | `TRUST_PROXY_HEADERS`        | учитывать `X-Forwarded-For` (за прокси)    | `false`                                                     |
 | `TRUSTED_PROXY_COUNT`        | число доверенных прокси перед приложением  | `1`                                                         |
 | `STORAGE_PROVIDER`           | `local` (dev) или `yandex` (S3)            | `local`                                                     |
@@ -165,7 +171,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - **CORS** (`app/main.py`) — белый список origin'ов (`CORS_ORIGINS`, не `*`),
   суженные методы (`GET/POST/PATCH/DELETE/OPTIONS`) и заголовки (`Authorization, Content-Type`).
 - **Rate limit** (`app/rate_limit.py`) — на логин, регистрацию, refresh, подтверждение
-  email и сброс пароля. Ключ — IP клиента; за прокси включается через `TRUST_PROXY_HEADERS`
+  email, запрос и сброс пароля. Ключ — IP клиента; за прокси включается через `TRUST_PROXY_HEADERS`
   (с защитой от подделки `X-Forwarded-For`). Хранилище счётчиков — in-memory (для нескольких
   инстансов нужен Redis).
 - **Ошибки наружу** — без stack trace; ошибки валидации переводятся в человекочитаемые
@@ -175,18 +181,27 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
   сверка с белым списком MIME (415).
 - **Секреты** — только в `.env` (в `.gitignore`); в коде секретов нет.
 - **Защита конфигурации** (`app/config.py`) — при `APP_ENV=production` приложение
-  не стартует со слабым `JWT_SECRET` или с включёнными тестовыми эндпоинтами.
+  не стартует со слабым `JWT_SECRET`, с тестовыми эндпоинтами, без SMTP, с `local`-хранилищем
+  или с localhost в `CORS_ORIGINS`/`FRONTEND_BASE_URL`. Отключаются `/docs`, `/redoc`,
+  `/openapi.json`, `/test`. Security headers включаются автоматически.
+- **Пароли** (`app/password_policy.py`) — минимум 8 символов, буква и цифра.
+- **Email verification** — мессенджер доступен только с подтверждённым email.
+- **Сессии** — access-токен проверяется по активной `sid` (logout/suspend действуют сразу).
+- **Регистрация** — `ALLOW_PUBLIC_REGISTRATION=false` для закрытой школы.
+- **Rate limit** — бэкенд `memory` (по умолчанию) или заготовка `redis` (`RATE_LIMIT_BACKEND`).
 
 ### Чек-лист перед продакшеном
 
 1. `APP_ENV=production` и стойкий `JWT_SECRET`
    (`python -c "import secrets; print(secrets.token_urlsafe(64))"`).
-2. `CORS_ORIGINS` — реальный домен фронтенда (например `https://app.example.com`).
+2. `CORS_ORIGINS` и `FRONTEND_BASE_URL` — публичные домены (без localhost).
 3. `ENABLE_TEST_ENDPOINTS=false`.
-4. За nginx: `TRUST_PROXY_HEADERS=true`, корректный `TRUSTED_PROXY_COUNT`
+4. `SMTP_HOST` и учётные данные SMTP.
+5. `STORAGE_PROVIDER=yandex` и `S3_*`.
+6. Первый admin: `scripts/create_admin.py` (не `seed.py`).
+7. За nginx: `TRUST_PROXY_HEADERS=true`, корректный `TRUSTED_PROXY_COUNT`
    и `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
-5. Боевые `STORAGE_PROVIDER`/S3-ключи и `SMTP_*` заданы и не закоммичены.
-6. (При нескольких воркерах/инстансах) вынести rate limit в Redis.
+8. (При нескольких воркерах/инстансах) вынести rate limit в Redis.
 
 ## Полезные скрипты
 
@@ -197,8 +212,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 # Прогон сквозного smoke-теста (отдельная БД .smoke_test.db, messenger.db не трогает):
 .\.venv\Scripts\python.exe scripts\smoke_test.py
 
-# Наполнить БД тестовыми данными (пользователи/чаты/сообщения):
+# Наполнить БД тестовыми данными (ВНИМАНИЕ: полная очистка messenger.db):
 .\.venv\Scripts\python.exe scripts\seed.py
+
+# Создать первого администратора без очистки БД (staging/production):
+.\.venv\Scripts\python.exe scripts\create_admin.py --nickname admin --email admin@school.ru
+# Пароль: --password, ADMIN_PASSWORD или интерактивный ввод
 ```
 
 После сидинга доступны пользователи `alice` (curator), `bob`, `carol`, `dave`

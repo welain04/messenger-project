@@ -457,6 +457,16 @@ def get_session(session_id: str | UUID) -> sqlite3.Row | None:
     )
 
 
+def is_session_active(session_id: str | UUID) -> bool:
+    """Сессия не отозвана и не истекла."""
+    row = db.query_one(
+        "SELECT 1 FROM user_sessions "
+        "WHERE id=? AND revoked_at IS NULL AND expires_at > ?",
+        (str(session_id), _now_str()),
+    )
+    return row is not None
+
+
 def rotate_session(
     session_id: str | UUID, new_refresh_token_hash: str, new_expires_at: datetime
 ) -> None:

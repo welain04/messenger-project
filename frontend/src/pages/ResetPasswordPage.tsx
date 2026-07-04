@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { authApi, formatApiError } from "../api";
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_HINT,
+  PASSWORD_PATTERN,
+  PASSWORD_TITLE,
+} from "../auth/passwordPolicy";
 import { ErrorBox } from "../components/States";
 
 export const ResetPasswordPage = () => {
@@ -73,11 +79,13 @@ export const ResetPasswordPage = () => {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
+            pattern={PASSWORD_PATTERN}
+            title={PASSWORD_TITLE}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"
-            placeholder="минимум 6 символов"
+            placeholder={PASSWORD_HINT}
           />
         </div>
         <div>
@@ -85,7 +93,7 @@ export const ResetPasswordPage = () => {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:ring-1"

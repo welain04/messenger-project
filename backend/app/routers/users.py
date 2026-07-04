@@ -189,7 +189,7 @@ def search_users(
 @router.get("/{user_id}", response_model=UserPublic)
 def read_user(
     user_id: UUID,
-    _: UserInDB = Depends(get_current_user),
+    _: UserInDB = Depends(require_verified_email),
 ) -> UserPublic:
     """Публичная карточка пользователя — нужна, чтобы показывать никнеймы
     собеседников в шапке чата и в Sidebar."""

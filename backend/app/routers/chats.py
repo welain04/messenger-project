@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import audit, storage
-from ..deps import get_current_user, require_verified_email
+from ..deps import require_verified_email
 from ..models import Chat, Notification, UserInDB, UserRole
 from ..permissions import Permission, has_permission
 from ..schemas import (
@@ -141,7 +141,7 @@ def create_chat(
 
 
 @router.get("", response_model=list[ChatListItem])
-def list_chats(current: UserInDB = Depends(get_current_user)) -> list[ChatListItem]:
+def list_chats(current: UserInDB = Depends(require_verified_email)) -> list[ChatListItem]:
     items: list[ChatListItem] = []
     for chat in storage.list_chats_for_user(current.id):
         items.append(
@@ -164,7 +164,7 @@ def list_chats(current: UserInDB = Depends(get_current_user)) -> list[ChatListIt
 
 
 @router.get("/{chat_id}", response_model=ChatDetail)
-def get_chat(chat_id: UUID, current: UserInDB = Depends(get_current_user)) -> ChatDetail:
+def get_chat(chat_id: UUID, current: UserInDB = Depends(require_verified_email)) -> ChatDetail:
     chat = _get_chat_or_404(chat_id)
     _ensure_participant(chat, current)
     return _to_detail(chat, current)
@@ -174,7 +174,7 @@ def get_chat(chat_id: UUID, current: UserInDB = Depends(get_current_user)) -> Ch
 def add_participant(
     chat_id: UUID,
     payload: AddParticipantRequest,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> ChatDetail:
     chat = _get_chat_or_404(chat_id)
     _ensure_can_manage_members(chat, current)
@@ -199,7 +199,7 @@ def add_participant(
 def remove_participant(
     chat_id: UUID,
     user_id: UUID,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> None:
     chat = _get_chat_or_404(chat_id)
     _ensure_can_manage_members(chat, current)
@@ -214,7 +214,7 @@ def remove_participant(
 
 
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_chat(chat_id: UUID, current: UserInDB = Depends(get_current_user)) -> None:
+def delete_chat(chat_id: UUID, current: UserInDB = Depends(require_verified_email)) -> None:
     chat = _get_chat_or_404(chat_id)
     _ensure_can_edit_chat(chat, current)
     storage.delete_chat(chat_id)

@@ -10,6 +10,7 @@ from . import db
 from .config import get_settings
 from .errors import validation_exception_handler
 from .middleware import JWTUserMiddleware
+from .security_headers import SecurityHeadersMiddleware
 from .routers import admin, auth, chats, files, messages, notifications, uploads, users
 from .services.storage.factory import create_storage_service
 
@@ -25,10 +26,14 @@ def create_app() -> FastAPI:
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
     db.init_db()
+    docs_kwargs: dict = {}
+    if settings.is_production:
+        docs_kwargs = {"docs_url": None, "redoc_url": None, "openapi_url": None}
     app = FastAPI(
         title="Online School Messenger API",
         version="1.0.0",
         description="Messenger backend for an online school.",
+        **docs_kwargs,
     )
 
     try:
@@ -46,6 +51,8 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.add_middleware(JWTUserMiddleware)
+    if settings.security_headers_enabled:
+        app.add_middleware(SecurityHeadersMiddleware)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     api_v1 = APIRouter(prefix="/api/v1")
@@ -71,9 +78,10 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/test", include_in_schema=False)
-    def test_page() -> FileResponse:
-        return FileResponse(STATIC_DIR / "test.html")
+    if not settings.is_production:
+        @app.get("/test", include_in_schema=False)
+        def test_page() -> FileResponse:
+            return FileResponse(STATIC_DIR / "test.html")
 
     return app
 

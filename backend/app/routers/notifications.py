@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import storage
-from ..deps import get_current_user
+from ..deps import require_verified_email
 from ..models import UserInDB
 from ..schemas import NotificationOut
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("", response_model=list[NotificationOut])
-def list_notifications(current: UserInDB = Depends(get_current_user)) -> list[NotificationOut]:
+def list_notifications(current: UserInDB = Depends(require_verified_email)) -> list[NotificationOut]:
     items = storage.list_notifications(current.id)
     return [NotificationOut.model_validate(n) for n in items]
 
@@ -19,7 +19,7 @@ def list_notifications(current: UserInDB = Depends(get_current_user)) -> list[No
 @router.patch("/{notification_id}/read", response_model=NotificationOut)
 def mark_read(
     notification_id: UUID,
-    current: UserInDB = Depends(get_current_user),
+    current: UserInDB = Depends(require_verified_email),
 ) -> NotificationOut:
     n = storage.get_notification(notification_id)
     if not n:

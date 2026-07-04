@@ -2,6 +2,12 @@ import { useState } from "react";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_HINT,
+  PASSWORD_PATTERN,
+  PASSWORD_TITLE,
+} from "../auth/passwordPolicy";
 import { formatApiError } from "../api";
 import { ErrorBox } from "../components/States";
 
@@ -151,12 +157,14 @@ export const AuthPage = () => {
             <input
               type={showPassword ? "text" : "password"}
               required
-              minLength={6}
+              minLength={mode === "register" ? MIN_PASSWORD_LENGTH : 1}
+              pattern={mode === "register" ? PASSWORD_PATTERN : undefined}
+              title={mode === "register" ? PASSWORD_TITLE : undefined}
               data-testid="auth-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-10 text-sm text-slate-900 outline-none ring-primary-500/20 placeholder:text-slate-400 focus:border-primary-500 focus:ring-1"
-              placeholder="минимум 6 символов"
+              placeholder={mode === "register" ? PASSWORD_HINT : "пароль"}
             />
             <button
               type="button"

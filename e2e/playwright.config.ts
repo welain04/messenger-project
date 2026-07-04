@@ -56,6 +56,7 @@ const backendEnv: Record<string, string> = {
   RATE_LIMIT_SEARCH_PER_MIN: "0",
   RATE_LIMIT_VERIFY_PER_MIN: "0",
   RATE_LIMIT_FORGOT_PASSWORD_PER_MIN: "0",
+  RATE_LIMIT_RESET_PASSWORD_PER_MIN: "0",
   // Ссылки в письмах должны вести на тестовый фронтенд.
   FRONTEND_BASE_URL: APP_BASE_URL,
   PYTHONUNBUFFERED: "1",
