@@ -1,0 +1,18 @@
+# Контекст сборки Amvera — корень монорепозитория.
+# Не исключать frontend/.env.production — он нужен для npm run build.
+
+.git
+.cursor
+**/.venv
+**/node_modules
+**/dist
+**/.vite
+**/__pycache__
+*.db
+backend/uploads
+backend/e2e_uploads
+
+**/.env
+**/.env.*
+!**/.env.example
+!frontend/.env.production

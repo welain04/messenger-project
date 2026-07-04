@@ -8,14 +8,16 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ .
+# Явно — на случай если .dockerignore отфильтровал .env.*
+COPY frontend/.env.production .env.production
 
-# Vite подставляет VITE_* только на этапе сборки.
-# Источник URL: --build-arg VITE_API_BASE_URL=... или frontend/.env.production в репозитории.
 ARG VITE_API_BASE_URL=
-RUN if [ -n "$VITE_API_BASE_URL" ]; then export VITE_API_BASE_URL="$VITE_API_BASE_URL"; \
-    elif ! grep -qE '^VITE_API_BASE_URL=.+' .env.production 2>/dev/null; then \
-      echo "VITE_API_BASE_URL: задайте --build-arg или frontend/.env.production" >&2; exit 1; \
-    fi && npm run build
+RUN set -e; \
+    if [ -n "$VITE_API_BASE_URL" ]; then export VITE_API_BASE_URL="$VITE_API_BASE_URL"; \
+    elif [ -f .env.production ]; then echo "build: using .env.production"; \
+    else echo "build: нужен frontend/.env.production или --build-arg VITE_API_BASE_URL" >&2; ls -la; exit 1; \
+    fi; \
+    npm run build
 
 FROM nginx:1.27-alpine
 
