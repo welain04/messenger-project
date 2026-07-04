@@ -9,12 +9,13 @@ RUN npm ci
 
 COPY frontend/ .
 
-# Vite подставляет VITE_* только на этапе сборки (import.meta.env).
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
-RUN test -n "$VITE_API_BASE_URL" || (echo "VITE_API_BASE_URL build-arg is required" >&2 && exit 1)
-RUN npm run build
+# Vite подставляет VITE_* только на этапе сборки.
+# Источник URL: --build-arg VITE_API_BASE_URL=... или frontend/.env.production в репозитории.
+ARG VITE_API_BASE_URL=
+RUN if [ -n "$VITE_API_BASE_URL" ]; then export VITE_API_BASE_URL="$VITE_API_BASE_URL"; \
+    elif ! grep -qE '^VITE_API_BASE_URL=.+' .env.production 2>/dev/null; then \
+      echo "VITE_API_BASE_URL: задайте --build-arg или frontend/.env.production" >&2; exit 1; \
+    fi && npm run build
 
 FROM nginx:1.27-alpine
 
