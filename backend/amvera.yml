@@ -4,7 +4,7 @@ meta:
     name: docker
 
 build:
-  dockerfile: Dockerfile
+  dockerfile: backend/Dockerfile
 
 run:
   containerPort: 8000

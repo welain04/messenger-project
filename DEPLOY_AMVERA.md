@@ -109,8 +109,8 @@ Content-Type: application/json
 Локально (Docker):
 
 ```bash
-cd backend
-docker build -t messenger-backend .
+# из корня монорепозитория (контекст сборки — корень, как на Amvera)
+docker build -f backend/Dockerfile -t messenger-backend .
 docker run --rm -p 8000:8000 -e APP_ENV=development messenger-backend
 curl http://localhost:8000/health
 ```
@@ -151,8 +151,8 @@ https://your-backend.amvera.io/api/v1
 1. **Локально:**
 
    ```bash
-   cd frontend
-   docker build \
+   # из корня монорепозитория
+   docker build -f frontend/Dockerfile \
      --build-arg VITE_API_BASE_URL=https://your-backend.amvera.io/api/v1 \
      -t messenger-frontend .
    docker run --rm -p 8080:80 messenger-frontend
