@@ -9,3 +9,5 @@ build:
 run:
   containerPort: 8000
   persistenceMount: /data
+  command: sh
+  args: -c "python scripts/create_admin.py --nickname admin --email welain04@mail.ru && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
