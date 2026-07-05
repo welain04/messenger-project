@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import traceback
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -25,8 +27,14 @@ def _uuid_str(value: UUID | str | None) -> str | None:
 
 
 def _emit(logger: logging.Logger, level: int, event: str, **fields: Any) -> None:
-    clean = sanitize_dict(fields)
-    logger.log(level, event, extra={"event": event, **clean})
+    payload: dict[str, Any] = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "level": logging.getLevelName(level),
+        "logger": logger.name,
+        "event": event,
+        **sanitize_dict(fields),
+    }
+    logger.log(level, json.dumps(payload, ensure_ascii=False, default=str))
 
 
 def log_http_request(
