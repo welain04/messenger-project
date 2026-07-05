@@ -81,13 +81,18 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    if settings.SENTRY_DSN.strip() and settings.SENTRY_DEBUG_KEY.strip():
+    if settings.SENTRY_DSN.strip():
+        debug_key = settings.SENTRY_DEBUG_KEY.strip()
+        if debug_key:
+            logger.info("Sentry debug test route: /health/sentry-test")
 
-        @app.get("/debug/sentry-test", include_in_schema=False)
-        def sentry_test(key: str = Query(...)) -> None:
-            if key != settings.SENTRY_DEBUG_KEY:
-                raise HTTPException(status_code=404, detail="Not found")
-            raise RuntimeError("Sentry backend test")
+            @app.get("/health/sentry-test", include_in_schema=False)
+            def sentry_test(key: str = Query(...)) -> None:
+                if key != get_settings().SENTRY_DEBUG_KEY.strip():
+                    raise HTTPException(status_code=404, detail="Not found")
+                raise RuntimeError("Sentry backend test")
+        else:
+            logger.warning("SENTRY_DEBUG_KEY is empty — /health/sentry-test disabled")
 
     if not settings.is_production:
         @app.get("/test", include_in_schema=False)

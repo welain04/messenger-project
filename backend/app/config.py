@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     # Sentry (пустой DSN -> отключено).
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.0
-    # Ключ для GET /debug/sentry-test?key=... (пусто -> эндпоинт не регистрируется).
+    # Ключ для GET /health/sentry-test?key=... (пусто -> эндпоинт не регистрируется).
     SENTRY_DEBUG_KEY: str = ""
 
     # Object storage (Yandex Object Storage / local dev).
