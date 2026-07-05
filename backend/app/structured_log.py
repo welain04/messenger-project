@@ -14,10 +14,32 @@ from .log_sanitize import sanitize_dict
 EVENT_ACCESS = "http_request"
 EVENT_BUSINESS = "business"
 EVENT_ERROR = "error"
+EVENT_STORAGE = "storage"
 
 _access_logger = logging.getLogger("messenger.access")
 _business_logger = logging.getLogger("messenger.business")
 _error_logger = logging.getLogger("messenger.error")
+_storage_logger = logging.getLogger("messenger.storage")
+
+
+def _format_summary(event: str, fields: dict[str, Any]) -> str:
+    if event == EVENT_ACCESS:
+        return (
+            f"{fields.get('method')} {fields.get('path')} "
+            f"{fields.get('status')} {fields.get('duration_ms')}ms"
+        )
+    if event == EVENT_BUSINESS:
+        action = fields.get("action", "business")
+        entity = fields.get("entity_type", "")
+        return f"{action} ({entity})"
+    if event == EVENT_ERROR:
+        return f"{fields.get('exc_type')}: {fields.get('error_message')}"
+    if event == EVENT_STORAGE:
+        return (
+            f"storage {fields.get('phase')} op={fields.get('operation')} "
+            f"provider={fields.get('provider')}"
+        )
+    return event
 
 
 def _uuid_str(value: UUID | str | None) -> str | None:
@@ -27,12 +49,14 @@ def _uuid_str(value: UUID | str | None) -> str | None:
 
 
 def _emit(logger: logging.Logger, level: int, event: str, **fields: Any) -> None:
+    clean = sanitize_dict(fields)
     payload: dict[str, Any] = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "level": logging.getLevelName(level),
         "logger": logger.name,
         "event": event,
-        **sanitize_dict(fields),
+        "message": _format_summary(event, clean),
+        **clean,
     }
     logger.log(level, json.dumps(payload, ensure_ascii=False, default=str))
 
@@ -102,4 +126,23 @@ def log_error_event(
         status=status,
         user_id=_uuid_str(user_id),
         request_id=request_id,
+    )
+
+
+def log_storage_event(
+    *,
+    phase: str,
+    operation: str,
+    provider: str,
+    **fields: Any,
+) -> None:
+    level = logging.ERROR if phase == "error" else logging.INFO
+    _emit(
+        _storage_logger,
+        level,
+        EVENT_STORAGE,
+        phase=phase,
+        operation=operation,
+        provider=provider,
+        **fields,
     )

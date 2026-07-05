@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import BinaryIO
 
-logger = logging.getLogger("messenger.storage")
+from ...structured_log import log_storage_event
 
 
 class StorageError(Exception):
@@ -42,19 +41,28 @@ class StorageService(ABC):
 
     def _log_request(self, operation: str, **kwargs: object) -> None:
         safe = {k: v for k, v in kwargs.items() if k not in ("data", "secret", "body")}
-        logger.info("storage request op=%s provider=%s %s", operation, self.provider_name, safe)
+        log_storage_event(
+            phase="request",
+            operation=operation,
+            provider=self.provider_name,
+            **safe,
+        )
 
     def _log_response(self, operation: str, **kwargs: object) -> None:
-        logger.info("storage response op=%s provider=%s %s", operation, self.provider_name, kwargs)
+        log_storage_event(
+            phase="response",
+            operation=operation,
+            provider=self.provider_name,
+            **kwargs,
+        )
 
     def _log_error(self, operation: str, exc: Exception, **kwargs: object) -> None:
-        logger.error(
-            "storage error op=%s provider=%s error=%s %s",
-            operation,
-            self.provider_name,
-            exc,
-            kwargs,
-            exc_info=True,
+        log_storage_event(
+            phase="error",
+            operation=operation,
+            provider=self.provider_name,
+            error=str(exc),
+            **kwargs,
         )
 
     @abstractmethod
