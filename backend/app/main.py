@@ -12,6 +12,7 @@ from .errors import validation_exception_handler
 from .middleware import JWTUserMiddleware
 from .security_headers import SecurityHeadersMiddleware
 from .routers import admin, auth, chats, files, messages, notifications, uploads, users
+from .sentry_setup import init_sentry
 from .services.storage.factory import create_storage_service
 
 logger = logging.getLogger("messenger")
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     )
+    init_sentry(settings)
     db.init_db()
     docs_kwargs: dict = {}
     if settings.is_production:

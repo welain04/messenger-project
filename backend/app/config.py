@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
+    # Sentry (пустой DSN -> отключено).
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
+
     # Object storage (Yandex Object Storage / local dev).
     STORAGE_PROVIDER: str = "local"
     S3_ENDPOINT: str = "https://storage.yandexcloud.net"
