@@ -1,10 +1,11 @@
 from pathlib import Path
 import logging
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from starlette.exceptions import HTTPException
 
 from . import db
 from .config import get_settings
@@ -79,6 +80,14 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    if settings.SENTRY_DSN.strip() and settings.SENTRY_DEBUG_KEY.strip():
+
+        @app.get("/debug/sentry-test", include_in_schema=False)
+        def sentry_test(key: str = Query(...)) -> None:
+            if key != settings.SENTRY_DEBUG_KEY:
+                raise HTTPException(status_code=404, detail="Not found")
+            raise RuntimeError("Sentry backend test")
 
     if not settings.is_production:
         @app.get("/test", include_in_schema=False)
