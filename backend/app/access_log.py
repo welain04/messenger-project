@@ -24,19 +24,22 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("x-request-id") or str(uuid4())
         request.state.request_id = request_id
         started = time.perf_counter()
+        status = 500
 
-        response = await call_next(request)
-
-        user = getattr(request.state, "user", None)
-        duration_ms = (time.perf_counter() - started) * 1000
-        log_http_request(
-            method=request.method,
-            path=request.url.path,
-            status=response.status_code,
-            duration_ms=duration_ms,
-            user_id=user.id if user else None,
-            client_ip=_client_ip(request),
-            request_id=request_id,
-        )
-        response.headers.setdefault("X-Request-ID", request_id)
-        return response
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            response.headers.setdefault("X-Request-ID", request_id)
+            return response
+        finally:
+            user = getattr(request.state, "user", None)
+            duration_ms = (time.perf_counter() - started) * 1000
+            log_http_request(
+                method=request.method,
+                path=request.url.path,
+                status=status,
+                duration_ms=duration_ms,
+                user_id=user.id if user else None,
+                client_ip=_client_ip(request),
+                request_id=request_id,
+            )

@@ -1,5 +1,6 @@
 from pathlib import Path
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Query
 from fastapi.exceptions import RequestValidationError
@@ -24,9 +25,15 @@ logger = logging.getLogger("messenger")
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Uvicorn перенастраивает logging при старте — применяем JSON после него.
+    setup_logging(get_settings())
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    setup_logging(settings)
     init_sentry(settings)
     db.init_db()
     docs_kwargs: dict = {}
@@ -36,6 +43,7 @@ def create_app() -> FastAPI:
         title="Online School Messenger API",
         version="1.0.0",
         description="Messenger backend for an online school.",
+        lifespan=_lifespan,
         **docs_kwargs,
     )
 
@@ -46,6 +54,8 @@ def create_app() -> FastAPI:
         logger.warning("StorageService not initialized: %s", exc)
         app.state.storage_service = None
 
+    if settings.security_headers_enabled:
+        app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
@@ -55,8 +65,6 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(JWTUserMiddleware)
     app.add_middleware(AccessLogMiddleware)
-    if settings.security_headers_enabled:
-        app.add_middleware(SecurityHeadersMiddleware)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
