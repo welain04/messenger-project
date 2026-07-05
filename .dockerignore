@@ -16,3 +16,4 @@ backend/e2e_uploads
 **/.env.*
 !**/.env.example
 !frontend/.env.production
+!backend/.env.production
