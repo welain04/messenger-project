@@ -115,6 +115,13 @@ def register(payload: RegisterRequest) -> MePrivate:
     )
     storage.create_user(user)
     _issue_verification_email(user)
+    audit.record(
+        "auth.register",
+        "user",
+        actor_id=user.id,
+        entity_id=user.id,
+        data={"nickname": user.nickname, "email": user.email},
+    )
     return MePrivate.model_validate(user)
 
 

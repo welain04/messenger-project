@@ -108,6 +108,16 @@ class Settings(BaseSettings):
     # Ключ для GET /health/sentry-test?key=... (пусто -> эндпоинт не регистрируется).
     SENTRY_DEBUG_KEY: str = ""
 
+    # Structured logging: JSON в stdout (Amvera). LOG_JSON=false — текст локально.
+    LOG_LEVEL: str = "INFO"
+    LOG_JSON: bool = True
+
+    @property
+    def log_json_enabled(self) -> bool:
+        if self.is_production:
+            return True
+        return self.LOG_JSON
+
     # Object storage (Yandex Object Storage / local dev).
     STORAGE_PROVIDER: str = "local"
     S3_ENDPOINT: str = "https://storage.yandexcloud.net"

@@ -127,6 +127,14 @@ def create_chat(
     )
     storage.create_chat(chat)
 
+    audit.record(
+        "chat.created",
+        "chat",
+        actor_id=current.id,
+        entity_id=chat.id,
+        data={"type": chat.type, "participant_count": len(participants)},
+    )
+
     for pid in participants:
         if pid == current.id:
             continue

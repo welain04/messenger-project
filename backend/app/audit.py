@@ -15,6 +15,7 @@ import logging
 from uuid import UUID
 
 from . import storage
+from .structured_log import log_business_event
 
 logger = logging.getLogger("app.audit")
 
@@ -40,6 +41,13 @@ def record(
 ) -> None:
     try:
         storage.create_audit_log(
+            action=action,
+            entity_type=entity_type,
+            actor_id=actor_id,
+            entity_id=entity_id,
+            data=data,
+        )
+        log_business_event(
             action=action,
             entity_type=entity_type,
             actor_id=actor_id,

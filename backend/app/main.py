@@ -10,6 +10,9 @@ from starlette.exceptions import HTTPException
 from . import db
 from .config import get_settings
 from .errors import validation_exception_handler
+from .access_log import AccessLogMiddleware
+from .exception_handlers import unhandled_exception_handler
+from .logging_config import setup_logging
 from .middleware import JWTUserMiddleware
 from .security_headers import SecurityHeadersMiddleware
 from .routers import admin, auth, chats, files, messages, notifications, uploads, users
@@ -23,10 +26,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    )
+    setup_logging(settings)
     init_sentry(settings)
     db.init_db()
     docs_kwargs: dict = {}
@@ -54,9 +54,11 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.add_middleware(JWTUserMiddleware)
+    app.add_middleware(AccessLogMiddleware)
     if settings.security_headers_enabled:
         app.add_middleware(SecurityHeadersMiddleware)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(auth.router)
