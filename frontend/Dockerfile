@@ -28,6 +28,9 @@ RUN set -e; \
     test -n "$VITE_API_BASE_URL" || (echo "build: VITE_API_BASE_URL пуст" >&2 && exit 1); \
     npm run build; \
     grep -rq "amvera.io" dist/assets/ || (echo "build: URL backend не попал в бандл" >&2 && exit 1); \
+    if grep -q '^VITE_SENTRY_DSN=.' .env.production 2>/dev/null; then \
+      grep -rq "ingest.sentry.io" dist/assets/ || (echo "build: VITE_SENTRY_DSN не попал в бандл" >&2 && exit 1); \
+    fi; \
     echo "build: OK — API URL вшит в dist/"
 
 FROM nginx:1.27-alpine

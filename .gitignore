@@ -19,6 +19,7 @@ pnpm-debug.log*
 .env.*
 !.env.example
 !frontend/.env.production
+!backend/.env.production
 
 # TypeScript cache
 *.tsbuildinfo

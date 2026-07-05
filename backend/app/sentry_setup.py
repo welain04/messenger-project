@@ -29,6 +29,7 @@ def _before_send(event: dict, hint: dict) -> dict | None:
 def init_sentry(settings: Settings) -> None:
     dsn = settings.SENTRY_DSN.strip()
     if not dsn:
+        logger.info("Sentry disabled (SENTRY_DSN is empty)")
         return
 
     sentry_sdk.init(

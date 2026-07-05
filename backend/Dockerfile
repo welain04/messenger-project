@@ -14,6 +14,9 @@ COPY backend/alembic.ini .
 COPY backend/alembic ./alembic
 COPY backend/app ./app
 COPY backend/scripts ./scripts
+COPY backend/.env.production .env.production
+
+ENV ENV_FILE=.env.production
 
 EXPOSE 8000
 
