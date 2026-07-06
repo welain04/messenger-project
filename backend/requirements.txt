@@ -12,3 +12,5 @@ filetype>=1.2.0
 SQLAlchemy>=2.0
 alembic>=1.13
 sentry-sdk[fastapi]>=2.0
+# TestClient (scripts/smoke_test.py, локальные проверки). Starlette 1.3+ требует httpx2.
+httpx2>=0.1.0
