@@ -47,6 +47,10 @@ def record(
             entity_id=entity_id,
             data=data,
         )
+    except Exception:  # noqa: BLE001
+        logger.exception("Не удалось записать audit_log в БД: %s", action)
+
+    try:
         log_business_event(
             action=action,
             entity_type=entity_type,
@@ -55,4 +59,4 @@ def record(
             data=data,
         )
     except Exception:  # noqa: BLE001
-        logger.exception("Не удалось записать событие аудита: %s", action)
+        logger.exception("Не удалось записать business log: %s", action)
