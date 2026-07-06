@@ -1,5 +1,7 @@
 # Online School Messenger
 
+[![CI](https://github.com/welain04/messenger-project/actions/workflows/ci.yml/badge.svg)](https://github.com/welain04/messenger-project/actions/workflows/ci.yml)
+
 Монорепозиторий учебного мессенджера:
 - `backend/` — FastAPI + SQLite
 - `frontend/` — React 18 + TypeScript + Vite
@@ -70,6 +72,78 @@ npm run test:e2e:report   # HTML-отчёт
 ```
 
 По умолчанию E2E поднимают изолированные backend/frontend автоматически (порты `8081` и `5183`), отдельная БД — `backend/e2e.db`, локальное файловое хранилище (без Yandex S3), без SMTP и без rate limit. Прод-`.env` при этом не используется.
+
+## CI (GitHub Actions)
+
+Конфигурация: [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+Workflow **CI** запускается автоматически при каждом **push** (любая ветка) и при **pull request**. Секреты и prod-`.env` не нужны — проверки используют изолированные тестовые настройки. При новом push в ту же ветку предыдущий прогон отменяется.
+
+Три job'а выполняются **параллельно**:
+
+| Job | Что проверяет |
+|---|---|
+| **Backend (smoke test)** | Python 3.12, `pip install`, скрипт `backend/scripts/smoke_test.py` (регистрация, чаты, сообщения, права через `TestClient`) |
+| **Frontend (typecheck & build)** | Node 20, `npm ci`, `tsc --noEmit`, `vite build` |
+| **E2E (Playwright)** | Полный прогон Playwright: backend/frontend поднимаются автоматически (`CI=true` → 1 worker, 1 retry) |
+
+Результаты: вкладка **Actions** в GitHub. Если упал job **E2E**, скачайте артефакт `playwright-report` (HTML-отчёт, хранится 7 дней).
+
+### Локально повторить проверки CI
+
+**Backend (smoke test):**
+
+```powershell
+cd backend
+python -m pip install -r requirements.txt
+$env:APP_ENV="development"
+$env:SMTP_HOST=""
+$env:DATABASE_PATH=".smoke_test.db"
+$env:RATE_LIMIT_LOGIN_PER_MIN="0"
+$env:RATE_LIMIT_REGISTER_PER_MIN="0"
+$env:RATE_LIMIT_SEARCH_PER_MIN="0"
+$env:RATE_LIMIT_VERIFY_PER_MIN="0"
+$env:RATE_LIMIT_FORGOT_PASSWORD_PER_MIN="0"
+$env:RATE_LIMIT_RESET_PASSWORD_PER_MIN="0"
+python scripts/smoke_test.py
+```
+
+Linux / macOS:
+
+```bash
+cd backend
+pip install -r requirements.txt
+APP_ENV=development SMTP_HOST= DATABASE_PATH=.smoke_test.db \
+  RATE_LIMIT_LOGIN_PER_MIN=0 RATE_LIMIT_REGISTER_PER_MIN=0 \
+  RATE_LIMIT_SEARCH_PER_MIN=0 RATE_LIMIT_VERIFY_PER_MIN=0 \
+  RATE_LIMIT_FORGOT_PASSWORD_PER_MIN=0 RATE_LIMIT_RESET_PASSWORD_PER_MIN=0 \
+  python scripts/smoke_test.py
+```
+
+**Frontend (typecheck & build):**
+
+```powershell
+cd frontend
+npm ci
+npx tsc --noEmit
+$env:VITE_API_BASE_URL="http://127.0.0.1:8081/api/v1"
+npm run build
+```
+
+**E2E (как в CI):**
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+cd ..\frontend
+npm ci
+cd ..\e2e
+npm ci
+npm run test:e2e:install
+$env:CI="true"
+npm run test:e2e
+```
 
 ## Конфигурация и безопасность
 
